@@ -1,0 +1,268 @@
+{
+  "module": {
+    "name": "CALCULATOR",
+    "language": "COBOL",
+    "source_file": "calculator.cbl"
+  },
+  "data_types": [
+    {
+      "name": "WS-NUM1",
+      "cobol_pic": "9(5)",
+      "type": "integer",
+      "size": 5,
+      "initial_value": "00000",
+      "description": "Numeric field for first operand"
+    },
+    {
+      "name": "WS-NUM2",
+      "cobol_pic": "9(5)",
+      "type": "integer",
+      "size": 5,
+      "initial_value": "00000",
+      "description": "Numeric field for second operand"
+    },
+    {
+      "name": "WS-RESULT",
+      "cobol_pic": "9(10)",
+      "type": "integer",
+      "size": 10,
+      "initial_value": "0000000000",
+      "description": "Numeric field for operation result"
+    },
+    {
+      "name": "WS-OPERATION",
+      "cobol_pic": "X(1)",
+      "type": "string",
+      "size": 1,
+      "initial_value": " ",
+      "description": "Character field for operation type"
+    }
+  ],
+  "functions": [
+    {
+      "name": "MAIN-PARAGRAPH",
+      "type": "paragraph",
+      "is_entry_point": true,
+      "body": [
+        {
+          "statement": "MOVE",
+          "operation": "assignment",
+          "source": "100",
+          "target": "WS-NUM1"
+        },
+        {
+          "statement": "MOVE",
+          "operation": "assignment",
+          "source": "50",
+          "target": "WS-NUM2"
+        },
+        {
+          "statement": "PERFORM",
+          "operation": "call",
+          "target": "ADD-NUMBERS"
+        },
+        {
+          "statement": "PERFORM",
+          "operation": "call",
+          "target": "SUBTRACT-NUMBERS"
+        },
+        {
+          "statement": "PERFORM",
+          "operation": "call",
+          "target": "MULTIPLY-NUMBERS"
+        },
+        {
+          "statement": "STOP RUN",
+          "operation": "terminate",
+          "target": null
+        }
+      ],
+      "calls": [
+        "ADD-NUMBERS",
+        "SUBTRACT-NUMBERS",
+        "MULTIPLY-NUMBERS"
+      ],
+      "variables_read": [],
+      "variables_written": [
+        "WS-NUM1",
+        "WS-NUM2"
+      ]
+    },
+    {
+      "name": "ADD-NUMBERS",
+      "type": "paragraph",
+      "is_entry_point": false,
+      "body": [
+        {
+          "statement": "ADD",
+          "operation": "arithmetic",
+          "operator": "+",
+          "operand1": "WS-NUM1",
+          "operand2": "WS-NUM2",
+          "target": "WS-RESULT"
+        },
+        {
+          "statement": "DISPLAY",
+          "operation": "output",
+          "target": "screen",
+          "values": [
+            "SUM: ",
+            "WS-RESULT"
+          ]
+        }
+      ],
+      "calls": [],
+      "variables_read": [
+        "WS-NUM1",
+        "WS-NUM2",
+        "WS-RESULT"
+      ],
+      "variables_written": [
+        "WS-RESULT"
+      ]
+    },
+    {
+      "name": "SUBTRACT-NUMBERS",
+      "type": "paragraph",
+      "is_entry_point": false,
+      "body": [
+        {
+          "statement": "SUBTRACT",
+          "operation": "arithmetic",
+          "operator": "-",
+          "operand1": "WS-NUM1",
+          "operand2": "WS-NUM2",
+          "target": "WS-RESULT"
+        },
+        {
+          "statement": "DISPLAY",
+          "operation": "output",
+          "target": "screen",
+          "values": [
+            "DIFFERENCE: ",
+            "WS-RESULT"
+          ]
+        }
+      ],
+      "calls": [],
+      "variables_read": [
+        "WS-NUM1",
+        "WS-NUM2",
+        "WS-RESULT"
+      ],
+      "variables_written": [
+        "WS-RESULT"
+      ]
+    },
+    {
+      "name": "MULTIPLY-NUMBERS",
+      "type": "paragraph",
+      "is_entry_point": false,
+      "body": [
+        {
+          "statement": "MULTIPLY",
+          "operation": "arithmetic",
+          "operator": "*",
+          "operand1": "WS-NUM1",
+          "operand2": "WS-NUM2",
+          "target": "WS-RESULT"
+        },
+        {
+          "statement": "DISPLAY",
+          "operation": "output",
+          "target": "screen",
+          "values": [
+            "PRODUCT: ",
+            "WS-RESULT"
+          ]
+        }
+      ],
+      "calls": [],
+      "variables_read": [
+        "WS-NUM1",
+        "WS-NUM2",
+        "WS-RESULT"
+      ],
+      "variables_written": [
+        "WS-RESULT"
+      ]
+    }
+  ],
+  "call_graph": {
+    "nodes": [
+      "MAIN-PARAGRAPH",
+      "ADD-NUMBERS",
+      "SUBTRACT-NUMBERS",
+      "MULTIPLY-NUMBERS"
+    ],
+    "edges": [
+      {
+        "from": "MAIN-PARAGRAPH",
+        "to": "ADD-NUMBERS",
+        "type": "PERFORM"
+      },
+      {
+        "from": "MAIN-PARAGRAPH",
+        "to": "SUBTRACT-NUMBERS",
+        "type": "PERFORM"
+      },
+      {
+        "from": "MAIN-PARAGRAPH",
+        "to": "MULTIPLY-NUMBERS",
+        "type": "PERFORM"
+      }
+    ]
+  },
+  "io_contracts": [
+    {
+      "function": "ADD-NUMBERS",
+      "operations": [
+        {
+          "type": "output",
+          "method": "DISPLAY",
+          "target": "screen",
+          "data": [
+            "SUM: ",
+            "WS-RESULT"
+          ]
+        }
+      ]
+    },
+    {
+      "function": "SUBTRACT-NUMBERS",
+      "operations": [
+        {
+          "type": "output",
+          "method": "DISPLAY",
+          "target": "screen",
+          "data": [
+            "DIFFERENCE: ",
+            "WS-RESULT"
+          ]
+        }
+      ]
+    },
+    {
+      "function": "MULTIPLY-NUMBERS",
+      "operations": [
+        {
+          "type": "output",
+          "method": "DISPLAY",
+          "target": "screen",
+          "data": [
+            "PRODUCT: ",
+            "WS-RESULT"
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "total_paragraphs": 4,
+    "total_variables": 4,
+    "max_call_depth": 1,
+    "has_file_io": false,
+    "has_screen_io": true,
+    "has_database_io": false
+  }
+}

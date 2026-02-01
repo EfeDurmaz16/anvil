@@ -1,0 +1,63 @@
+{
+  "score": 0.85,
+  "equivalent": false,
+  "checks": [
+    {
+      "name": "All 4 paragraphs mapped to functions",
+      "passed": true,
+      "details": "All 4 COBOL paragraphs (MAIN-PARAGRAPH, ADD-NUMBERS, SUBTRACT-NUMBERS, MULTIPLY-NUMBERS) are correctly mapped in the IR functions array with proper type 'paragraph'"
+    },
+    {
+      "name": "All 4 data variables mapped with correct types",
+      "passed": true,
+      "details": "All 4 variables mapped correctly: WS-NUM1 (9(5)->integer), WS-NUM2 (9(5)->integer), WS-RESULT (9(10)->integer), WS-OPERATION (X(1)->string)"
+    },
+    {
+      "name": "Arithmetic operations preserve semantics",
+      "passed": false,
+      "details": "CRITICAL ISSUE: SUBTRACT operation semantics are INCORRECT. COBOL 'SUBTRACT WS-NUM2 FROM WS-NUM1 GIVING WS-RESULT' means result = num1 - num2, but IR shows operand1=WS-NUM1, operand2=WS-NUM2 with operator '-' which would generate result = num1 - num2 (correct). However, the IR representation is ambiguous about operand order for SUBTRACT. The COBOL uses 'FROM' syntax which is 'SUBTRACT operand2 FROM operand1', not 'SUBTRACT operand1, operand2'. The IR should clarify this is subtrahend vs minuend."
+    },
+    {
+      "name": "DISPLAY statements map correctly",
+      "passed": true,
+      "details": "All DISPLAY statements correctly mapped with proper labels and values: 'SUM: '+WS-RESULT, 'DIFFERENCE: '+WS-RESULT, 'PRODUCT: '+WS-RESULT. These would correctly generate System.out.println(label + result)"
+    },
+    {
+      "name": "Call graph preserved",
+      "passed": true,
+      "details": "Call graph is complete and correct. MAIN-PARAGRAPH calls ADD-NUMBERS, SUBTRACT-NUMBERS, MULTIPLY-NUMBERS in exact order via PERFORM statements. Call graph structure shows all edges correctly."
+    },
+    {
+      "name": "Initial values preserved",
+      "passed": false,
+      "details": "ISSUE: Initial values in data_types section show '00000' for WS-NUM1 and WS-NUM2, but COBOL declares them as 'VALUE ZEROS' (initial state). The runtime values 100 and 50 are correctly captured in MAIN-PARAGRAPH MOVE operations. However, the data_types initial_value fields should distinguish between declaration-time initialization vs runtime assignment."
+    },
+    {
+      "name": "No business logic lost",
+      "passed": true,
+      "details": "All business logic preserved: variable initialization, three arithmetic operations (add, subtract, multiply), output formatting, and program termination (STOP RUN) are all captured"
+    }
+  ],
+  "issues": [
+    {
+      "severity": "medium",
+      "location": "data_types.initial_value",
+      "description": "Initial values show '00000' and '0000000000' instead of documenting COBOL 'VALUE ZEROS' declaration. This is technically correct (ZEROS = all zeros) but loses the semantic information that COBOL used the ZEROS keyword.",
+      "impact": "Minor - functionally equivalent but loses readability of original intent"
+    },
+    {
+      "severity": "high",
+      "location": "functions[SUBTRACT-NUMBERS].body[0]",
+      "description": "SUBTRACT operation representation is potentially ambiguous. COBOL uses 'SUBTRACT WS-NUM2 FROM WS-NUM1 GIVING WS-RESULT' which explicitly indicates operand order (result = WS-NUM1 - WS-NUM2). The IR shows operand1=WS-NUM1, operand2=WS-NUM2, operator='-', but doesn't explicitly document that this follows the 'FROM' syntax pattern. A code generator might incorrectly interpret this.",
+      "impact": "High - could lead to incorrect code generation if operand semantics are misunderstood. Recommend adding 'syntax_pattern': 'SUBTRACT FROM' to clarify."
+    },
+    {
+      "severity": "low",
+      "location": "data_types.WS-OPERATION",
+      "description": "WS-OPERATION variable is declared but never used in the program. IR correctly captures it but doesn't flag it as unused.",
+      "impact": "Low - variable exists in original code, so IR is accurate. Just noting dead code."
+    }
+  ],
+  "recommendation": "RETRY",
+  "recommendations_detail": "The IR is 85% semantically equivalent but has one critical ambiguity in the SUBTRACT operation that could lead to incorrect code generation. Recommend adding explicit metadata to arithmetic operations to clarify COBOL syntax patterns (e.g., 'SUBTRACT FROM' vs 'SUBTRACT'). Also consider adding initial value metadata to distinguish declaration-time vs runtime initialization. After these fixes, score would be 0.95+."
+}

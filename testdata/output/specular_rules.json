@@ -1,0 +1,271 @@
+{
+  "business_rules": [
+    {
+      "id": "CALCULATOR.rule_1",
+      "description": "Main orchestration rule: Initializes two numeric operands (100 and 50) and sequentially executes addition, subtraction, and multiplication operations on these values",
+      "source_ref": "MAIN-PARAGRAPH",
+      "confidence": 1.0,
+      "tags": ["orchestration", "initialization", "control-flow"],
+      "complexity": 3,
+      "rationale": "Simple sequential execution pattern with no branching or conditional logic. Complexity driven by number of operation calls (3) and data initialization (2 assignments)."
+    },
+    {
+      "id": "CALCULATOR.rule_2",
+      "description": "Addition operation rule: Computes the sum of two operands (WS-NUM1 + WS-NUM2) and displays the result with label 'SUM:'",
+      "source_ref": "ADD-NUMBERS",
+      "confidence": 1.0,
+      "tags": ["arithmetic", "addition", "display", "output"],
+      "complexity": 2,
+      "rationale": "Straightforward arithmetic operation followed by output. No conditional logic or loops. Minimal complexity."
+    },
+    {
+      "id": "CALCULATOR.rule_3",
+      "description": "Subtraction operation rule: Computes the difference of two operands (WS-NUM1 - WS-NUM2) and displays the result with label 'DIFFERENCE:'",
+      "source_ref": "SUBTRACT-NUMBERS",
+      "confidence": 1.0,
+      "tags": ["arithmetic", "subtraction", "display", "output"],
+      "complexity": 2,
+      "rationale": "Straightforward arithmetic operation followed by output. No conditional logic or loops. Minimal complexity."
+    },
+    {
+      "id": "CALCULATOR.rule_4",
+      "description": "Multiplication operation rule: Computes the product of two operands (WS-NUM1 * WS-NUM2) and displays the result with label 'PRODUCT:'",
+      "source_ref": "MULTIPLY-NUMBERS",
+      "confidence": 1.0,
+      "tags": ["arithmetic", "multiplication", "display", "output"],
+      "complexity": 2,
+      "rationale": "Straightforward arithmetic operation followed by output. No conditional logic or loops. Minimal complexity."
+    },
+    {
+      "id": "CALCULATOR.rule_5",
+      "description": "Result storage rule: All arithmetic operations store their results in a shared result field (WS-RESULT) which is reused across operations, implying sequential rather than parallel execution",
+      "source_ref": "ADD-NUMBERS, SUBTRACT-NUMBERS, MULTIPLY-NUMBERS",
+      "confidence": 0.95,
+      "tags": ["data-flow", "state-management", "shared-resource"],
+      "complexity": 4,
+      "rationale": "Inferred rule from data flow analysis. All operations write to the same result variable, indicating potential state dependency. Medium complexity due to implicit sequencing requirement."
+    },
+    {
+      "id": "CALCULATOR.rule_6",
+      "description": "Invariant rule: Operand values remain constant across all operations - initialized once in MAIN-PARAGRAPH and never modified by calculation functions",
+      "source_ref": "MAIN-PARAGRAPH, ADD-NUMBERS, SUBTRACT-NUMBERS, MULTIPLY-NUMBERS",
+      "confidence": 1.0,
+      "tags": ["invariant", "immutability", "data-integrity"],
+      "complexity": 2,
+      "rationale": "Analysis of variables_written shows operands are only set in MAIN-PARAGRAPH and only read in calculation functions. Simple read-only pattern."
+    },
+    {
+      "id": "CALCULATOR.rule_7",
+      "description": "Output formatting rule: All calculation results are displayed to screen with descriptive labels that indicate the operation type performed",
+      "source_ref": "ADD-NUMBERS, SUBTRACT-NUMBERS, MULTIPLY-NUMBERS",
+      "confidence": 1.0,
+      "tags": ["output", "formatting", "user-interface", "display"],
+      "complexity": 1,
+      "rationale": "Consistent pattern across all calculation functions. Very low complexity - simple string concatenation with result value."
+    },
+    {
+      "id": "CALCULATOR.rule_8",
+      "description": "Termination rule: Program executes exactly three arithmetic operations in fixed order (add, subtract, multiply) and then terminates via STOP RUN",
+      "source_ref": "MAIN-PARAGRAPH",
+      "confidence": 1.0,
+      "tags": ["control-flow", "termination", "lifecycle"],
+      "complexity": 1,
+      "rationale": "Deterministic execution flow with fixed termination. No loops or conditional exits. Minimal complexity."
+    }
+  ],
+  "data_constraints": [
+    {
+      "variable": "WS-NUM1",
+      "constraint_type": "numeric_range",
+      "description": "First operand must be a positive integer with maximum 5 digits (range: 0-99999)",
+      "pic_clause": "9(5)",
+      "min_value": 0,
+      "max_value": 99999,
+      "initial_value": "00000",
+      "enforcement": "COBOL PIC clause enforces automatic truncation/padding"
+    },
+    {
+      "variable": "WS-NUM2",
+      "constraint_type": "numeric_range",
+      "description": "Second operand must be a positive integer with maximum 5 digits (range: 0-99999)",
+      "pic_clause": "9(5)",
+      "min_value": 0,
+      "max_value": 99999,
+      "initial_value": "00000",
+      "enforcement": "COBOL PIC clause enforces automatic truncation/padding"
+    },
+    {
+      "variable": "WS-RESULT",
+      "constraint_type": "numeric_range",
+      "description": "Result field must accommodate products up to 10 digits (range: 0-9999999999). Sized to handle maximum multiplication of two 5-digit numbers (99999 * 99999 = 9999800001)",
+      "pic_clause": "9(10)",
+      "min_value": 0,
+      "max_value": 9999999999,
+      "initial_value": "0000000000",
+      "enforcement": "COBOL PIC clause enforces automatic truncation if overflow occurs",
+      "business_meaning": "Result field is intentionally sized to prevent overflow in multiplication operations, suggesting multiplication is the primary concern for result size"
+    },
+    {
+      "variable": "WS-OPERATION",
+      "constraint_type": "string_length",
+      "description": "Operation type indicator is a single character field (currently unused in the code but defined for potential operation selection logic)",
+      "pic_clause": "X(1)",
+      "max_length": 1,
+      "initial_value": " ",
+      "enforcement": "COBOL PIC clause enforces single character storage",
+      "business_meaning": "Suggests potential future enhancement for dynamic operation selection rather than fixed sequential execution"
+    },
+    {
+      "variable": "WS-NUM1",
+      "constraint_type": "data_integrity",
+      "description": "WS-NUM1 is read-only after initialization - written only in MAIN-PARAGRAPH, never modified by calculation functions",
+      "enforcement": "Code structure (not enforced by language but observed in implementation)"
+    },
+    {
+      "variable": "WS-NUM2",
+      "constraint_type": "data_integrity",
+      "description": "WS-NUM2 is read-only after initialization - written only in MAIN-PARAGRAPH, never modified by calculation functions",
+      "enforcement": "Code structure (not enforced by language but observed in implementation)"
+    },
+    {
+      "variable": "WS-RESULT",
+      "constraint_type": "data_lifecycle",
+      "description": "WS-RESULT is overwritten by each operation - no accumulation or preservation of previous results",
+      "enforcement": "Code structure (each calculation function writes to same target without reading previous value)"
+    }
+  ],
+  "data_flow_analysis": {
+    "entry_point": "MAIN-PARAGRAPH",
+    "data_initialization": [
+      {
+        "variable": "WS-NUM1",
+        "value": "100",
+        "source": "MAIN-PARAGRAPH",
+        "propagation": "flows to ADD-NUMBERS, SUBTRACT-NUMBERS, MULTIPLY-NUMBERS as read-only input"
+      },
+      {
+        "variable": "WS-NUM2",
+        "value": "50",
+        "source": "MAIN-PARAGRAPH",
+        "propagation": "flows to ADD-NUMBERS, SUBTRACT-NUMBERS, MULTIPLY-NUMBERS as read-only input"
+      }
+    ],
+    "data_transformations": [
+      {
+        "function": "ADD-NUMBERS",
+        "input": ["WS-NUM1", "WS-NUM2"],
+        "output": "WS-RESULT",
+        "operation": "WS-NUM1 + WS-NUM2 → WS-RESULT",
+        "expected_value": "150"
+      },
+      {
+        "function": "SUBTRACT-NUMBERS",
+        "input": ["WS-NUM1", "WS-NUM2"],
+        "output": "WS-RESULT",
+        "operation": "WS-NUM1 - WS-NUM2 → WS-RESULT",
+        "expected_value": "50"
+      },
+      {
+        "function": "MULTIPLY-NUMBERS",
+        "input": ["WS-NUM1", "WS-NUM2"],
+        "output": "WS-RESULT",
+        "operation": "WS-NUM1 * WS-NUM2 → WS-RESULT",
+        "expected_value": "5000"
+      }
+    ],
+    "shared_state": {
+      "variable": "WS-RESULT",
+      "writers": ["ADD-NUMBERS", "SUBTRACT-NUMBERS", "MULTIPLY-NUMBERS"],
+      "readers": ["ADD-NUMBERS", "SUBTRACT-NUMBERS", "MULTIPLY-NUMBERS"],
+      "concurrency_safe": false,
+      "note": "Result variable is reused across operations; sequential execution order is critical"
+    }
+  },
+  "architectural_insights": {
+    "pattern": "Sequential Processor Pattern",
+    "description": "The program follows a simple sequential processing pattern where data is initialized once and then processed through a fixed pipeline of operations",
+    "characteristics": [
+      "Single entry point with orchestration logic",
+      "Fixed execution sequence (no conditional branching)",
+      "Stateless calculation functions (pure functions with side effect of display)",
+      "Shared result storage (potential coupling point)",
+      "No error handling or validation logic"
+    ],
+    "potential_issues": [
+      {
+        "issue": "WS-OPERATION field defined but unused",
+        "impact": "Suggests incomplete feature or future enhancement",
+        "recommendation": "Either implement operation selection logic or remove unused field"
+      },
+      {
+        "issue": "No validation of numeric ranges before operations",
+        "impact": "Could lead to overflow in multiplication (though PIC clause provides some protection via truncation)",
+        "recommendation": "Add explicit range checking or overflow detection"
+      },
+      {
+        "issue": "No error handling for arithmetic operations",
+        "impact": "Silent failures or truncation on overflow",
+        "recommendation": "Implement ON SIZE ERROR clauses in COBOL or equivalent validation in modernized code"
+      },
+      {
+        "issue": "Hardcoded test values (100, 50)",
+        "impact": "Not production-ready - appears to be demonstration code",
+        "recommendation": "Add input mechanism (ACCEPT statements or parameter passing)"
+      }
+    ],
+    "modernization_considerations": [
+      "Functions are pure (side-effect free except for I/O) - good candidates for unit testing",
+      "No file or database I/O - simplifies migration",
+      "Screen I/O can be easily abstracted to return values instead of DISPLAY",
+      "Fixed operand values suggest this is example/test code rather than production logic",
+      "Call graph is simple tree (depth=1) - no recursive or complex control flow"
+    ]
+  },
+  "complexity_metrics": {
+    "overall_program_complexity": 3,
+    "cyclomatic_complexity": 1,
+    "data_coupling": "medium",
+    "control_flow_complexity": "low",
+    "explanation": {
+      "overall": "Low complexity program with straightforward sequential logic. Complexity score of 3 reflects basic arithmetic operations and simple orchestration.",
+      "cyclomatic": "No conditional branches or loops - single linear execution path",
+      "data_coupling": "Medium due to shared WS-RESULT variable across all calculation functions",
+      "control_flow": "Linear sequence of PERFORM statements with no branching or iteration"
+    },
+    "function_complexity": [
+      {
+        "function": "MAIN-PARAGRAPH",
+        "complexity": 3,
+        "statements": 6,
+        "branches": 0,
+        "loops": 0,
+        "calls": 3
+      },
+      {
+        "function": "ADD-NUMBERS",
+        "complexity": 2,
+        "statements": 2,
+        "branches": 0,
+        "loops": 0,
+        "calls": 0
+      },
+      {
+        "function": "SUBTRACT-NUMBERS",
+        "complexity": 2,
+        "statements": 2,
+        "branches": 0,
+        "loops": 0,
+        "calls": 0
+      },
+      {
+        "function": "MULTIPLY-NUMBERS",
+        "complexity": 2,
+        "statements": 2,
+        "branches": 0,
+        "loops": 0,
+        "calls": 0
+      }
+    ]
+  },
+  "summary": "The CALCULATOR program is a simple demonstration of basic arithmetic operations with very low complexity (score: 3/10). It implements a fixed sequential pipeline that initializes two operands (100 and 50), performs addition, subtraction, and multiplication operations on them, and displays each result to the screen. The program exhibits good separation of concerns with dedicated functions for each operation, but lacks error handling, input validation, and dynamic operation selection. Key business logic revolves around stateless arithmetic calculations with results displayed in a consistent labeled format. The architecture is straightforward with no file I/O, database operations, or complex control flow, making it an excellent candidate for modernization with minimal risk. The program appears to be example or test code rather than production logic, evidenced by hardcoded operand values and the unused WS-OPERATION field. Data constraints are enforced through COBOL PIC clauses, with the result field (10 digits) specifically sized to accommodate the maximum product of two 5-digit operands, suggesting multiplication overflow prevention was a design consideration. The program would benefit from input mechanisms, error handling, and either implementing or removing the unused operation selector field."
+}
