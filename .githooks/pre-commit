@@ -1,0 +1,13 @@
+#!/bin/sh
+set -e
+
+echo ">>> go vet"
+CGO_ENABLED=0 go vet ./...
+
+echo ">>> go build"
+CGO_ENABLED=0 go build ./...
+
+echo ">>> go test"
+CGO_ENABLED=0 go test ./... -count=1 -timeout 60s
+
+echo "✓ All checks passed"
