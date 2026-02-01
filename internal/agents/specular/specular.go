@@ -11,6 +11,7 @@ import (
 )
 
 // Specular uses LLM to extract business rules and enrich the IR.
+// When no LLM is available, it passes the graph through unchanged.
 type Specular struct{}
 
 func New() *Specular { return &Specular{} }
@@ -21,24 +22,33 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 	if ac.Graph == nil {
 		return nil, fmt.Errorf("specular: no graph provided")
 	}
+
+	// Graceful degradation: skip LLM enrichment when no provider is configured
 	if ac.LLM == nil {
-		return nil, fmt.Errorf("specular: no LLM provider")
+		return &agents.AgentResult{
+			Graph:    ac.Graph,
+			Metadata: map[string]string{"mode": "passthrough", "reason": "no LLM provider configured"},
+		}, nil
 	}
 
+	var allErrors []string
 	for _, mod := range ac.Graph.Modules {
 		for _, fn := range mod.Functions {
 			rules, err := extractRules(ctx, ac.LLM, mod.Name, fn)
 			if err != nil {
-				return &agents.AgentResult{
-					Graph:  ac.Graph,
-					Errors: []string{fmt.Sprintf("rule extraction for %s.%s: %v", mod.Name, fn.Name, err)},
-				}, nil
+				allErrors = append(allErrors, fmt.Sprintf("rule extraction for %s.%s: %v", mod.Name, fn.Name, err))
+				continue
 			}
 			ac.Graph.BusinessRules = append(ac.Graph.BusinessRules, rules...)
 		}
 	}
 
-	return &agents.AgentResult{Graph: ac.Graph}, nil
+	meta := map[string]string{"mode": "llm"}
+	if len(allErrors) > 0 {
+		meta["partial_errors"] = "true"
+	}
+
+	return &agents.AgentResult{Graph: ac.Graph, Errors: allErrors, Metadata: meta}, nil
 }
 
 func extractRules(ctx context.Context, provider llm.Provider, module string, fn *ir.Function) ([]*ir.BusinessRule, error) {

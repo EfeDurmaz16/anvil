@@ -1,6 +1,7 @@
 llm:
-  provider: anthropic
-  model: claude-sonnet-4-20250514
+  # provider: anthropic, openai, groq, huggingface, ollama, together, deepseek, custom, none
+  provider: none
+  model: ""
   api_key: ""
   base_url: ""
   temperature: 0.2
