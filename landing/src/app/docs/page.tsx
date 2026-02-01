@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Github, Sun, Moon, Search, ChevronRight, ArrowLeft, ArrowRight, AlertTriangle, Zap, Puzzle, Bot, Workflow } from "lucide-react";
+import { Github, Sun, Moon, Search, ChevronRight, ArrowLeft, ArrowRight, AlertTriangle, Zap, Puzzle, Bot, Workflow, Menu, X } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 
 const sidebarNav = [
@@ -63,6 +63,7 @@ const pages: Record<string, React.ReactNode> = {
 export default function DocsPage() {
   const { theme, toggle } = useTheme();
   const [activePage, setActivePage] = useState("introduction");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const allItems = sidebarNav.flatMap((g) => g.items);
   const currentIndex = allItems.findIndex((i) => i.slug === activePage);
@@ -74,10 +75,13 @@ export default function DocsPage() {
     <div className="min-h-screen transition-colors" style={{ backgroundColor: "var(--color-bg)" }}>
       {/* Header */}
       <header
-        className="sticky top-0 z-50 flex items-center justify-between px-6 py-3 backdrop-blur-md transition-colors"
+        className="sticky top-0 z-50 flex items-center justify-between px-4 md:px-6 py-3 backdrop-blur-md transition-colors"
         style={{ backgroundColor: "var(--color-header-bg)", borderBottom: "1px solid var(--color-border)" }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 md:gap-4">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-1 md:hidden" style={{ color: "var(--color-text)" }} aria-label="Toggle sidebar">
+            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
           <a href="/" className="flex items-center gap-2">
             <div className="w-6 h-6 bg-[var(--color-accent)] rounded-sm flex items-center justify-center">
               <span className="text-black font-mono text-[10px] font-bold">A</span>
@@ -89,8 +93,8 @@ export default function DocsPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5" style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5" style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
             <Search size={14} style={{ color: "var(--color-text-muted)" }} />
             <span className="font-mono text-[11px]" style={{ color: "var(--color-text-muted)" }}>Search docs...</span>
             <span className="font-mono text-[10px] px-1.5 py-0.5 ml-8" style={{ backgroundColor: "var(--color-bg)", color: "var(--color-text-muted)", border: "1px solid var(--color-border)" }}>
@@ -106,9 +110,12 @@ export default function DocsPage() {
         </div>
       </header>
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className="w-[260px] shrink-0 sticky top-[53px] h-[calc(100vh-53px)] overflow-y-auto p-5 flex flex-col gap-6" style={{ borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface-alt)" }}>
+      <div className="flex relative">
+        {/* Sidebar - hidden on mobile, toggled via hamburger */}
+        {sidebarOpen && (
+          <div className="fixed inset-0 z-30 bg-black/50 md:hidden" onClick={() => setSidebarOpen(false)} />
+        )}
+        <aside className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0 fixed md:sticky top-[53px] z-40 w-[260px] shrink-0 h-[calc(100vh-53px)] overflow-y-auto p-5 flex flex-col gap-6 transition-transform`} style={{ borderRight: "1px solid var(--color-border)", backgroundColor: "var(--color-surface-alt)" }}>
           {sidebarNav.map((group) => (
             <div key={group.group} className="flex flex-col gap-1">
               <span className="font-mono text-[10px] font-semibold tracking-[2px] mb-1" style={{ color: "var(--color-text-muted)" }}>
@@ -117,7 +124,7 @@ export default function DocsPage() {
               {group.items.map((item) => (
                 <button
                   key={item.slug}
-                  onClick={() => setActivePage(item.slug)}
+                  onClick={() => { setActivePage(item.slug); setSidebarOpen(false); }}
                   className="text-left font-mono text-[13px] px-3 py-1.5 transition-colors"
                   style={{
                     color: activePage === item.slug ? "var(--color-accent)" : "var(--color-text-secondary)",
@@ -133,7 +140,7 @@ export default function DocsPage() {
         </aside>
 
         {/* Main content */}
-        <main className="flex-1 max-w-[800px] px-12 py-8 flex flex-col gap-8">
+        <main className="flex-1 max-w-[800px] px-4 md:px-12 py-6 md:py-8 flex flex-col gap-6 md:gap-8 min-w-0">
           {/* Breadcrumbs */}
           <div className="flex items-center gap-1.5 font-mono text-[11px]">
             <a href="/" className="hover:opacity-80 transition-opacity" style={{ color: "var(--color-text-muted)" }}>Home</a>

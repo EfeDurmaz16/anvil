@@ -25,49 +25,52 @@ const cols = [
 
 export default function BenchmarkResults() {
   return (
-    <section id="benchmarks" className="flex flex-col items-center gap-12 px-[120px] py-20 transition-colors" style={{ backgroundColor: "var(--color-bg)" }}>
+    <section id="benchmarks" className="flex flex-col items-center gap-8 md:gap-12 px-4 md:px-[120px] py-12 md:py-20 transition-colors" style={{ backgroundColor: "var(--color-bg)" }}>
       <SectionLabel>BENCHMARKS</SectionLabel>
-      <h2 className="text-[40px] font-bold text-center" style={{ color: "var(--color-text)" }}>Battle-tested on real mainframe code.</h2>
+      <h2 className="text-2xl md:text-[40px] font-bold text-center" style={{ color: "var(--color-text)" }}>Battle-tested on real mainframe code.</h2>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.5 }}
-        className="inline-flex flex-col transition-colors"
-        style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-card-bg)" }}
+        className="w-full overflow-x-auto"
       >
-        {/* Header */}
-        <div className="flex px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
-          {cols.map((c) => (
-            <span key={c.key} className={`${c.w} font-mono text-[10px] font-semibold`} style={{ color: "var(--color-text-secondary)" }}>
-              {c.label}
-            </span>
+        <div className="inline-flex flex-col transition-colors min-w-[610px]"
+          style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-card-bg)" }}
+        >
+          {/* Header */}
+          <div className="flex px-4 md:px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+            {cols.map((c) => (
+              <span key={c.key} className={`${c.w} font-mono text-[10px] font-semibold`} style={{ color: "var(--color-text-secondary)" }}>
+                {c.label}
+              </span>
+            ))}
+          </div>
+          {/* Rows */}
+          {rows.map((r, i) => (
+            <div
+              key={i}
+              className="flex px-4 md:px-5 py-3 transition-colors"
+              style={{
+                borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--color-surface)")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+            >
+              <span className="w-[160px] font-mono text-[11px] font-medium" style={{ color: "var(--color-text)" }}>{r.name}</span>
+              <span className="w-[60px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.files}</span>
+              <span className="w-[70px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.modules}</span>
+              <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.fns}</span>
+              <span className="w-[90px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.types}</span>
+              <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.java}</span>
+              <span className="w-[70px] font-mono text-[11px] font-medium text-[var(--color-table-green)]">{r.time}</span>
+            </div>
           ))}
         </div>
-        {/* Rows */}
-        {rows.map((r, i) => (
-          <div
-            key={i}
-            className="flex px-5 py-3 transition-colors"
-            style={{
-              borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--color-surface)")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
-          >
-            <span className="w-[160px] font-mono text-[11px] font-medium" style={{ color: "var(--color-text)" }}>{r.name}</span>
-            <span className="w-[60px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.files}</span>
-            <span className="w-[70px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.modules}</span>
-            <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.fns}</span>
-            <span className="w-[90px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.types}</span>
-            <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.java}</span>
-            <span className="w-[70px] font-mono text-[11px] font-medium text-[var(--color-table-green)]">{r.time}</span>
-          </div>
-        ))}
       </motion.div>
 
-      <p className="font-mono text-sm font-semibold text-center" style={{ color: "var(--color-text)" }}>
+      <p className="font-mono text-xs md:text-sm font-semibold text-center" style={{ color: "var(--color-text)" }}>
         1,118 files &rarr; 380 Java classes in under 1 second. Zero API calls. Zero cloud dependencies.
       </p>
     </section>

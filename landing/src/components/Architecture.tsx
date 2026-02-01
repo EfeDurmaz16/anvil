@@ -25,13 +25,13 @@ export default function Architecture() {
   return (
     <section
       id="architecture"
-      className="flex flex-col items-center gap-12 px-[120px] py-20 bg-[var(--color-surface-alt)] border-y border-[var(--color-border-light)]"
+      className="flex flex-col items-center gap-8 md:gap-12 px-4 md:px-[120px] py-12 md:py-20 bg-[var(--color-surface-alt)] border-y border-[var(--color-border-light)]"
     >
       <SectionLabel>ARCHITECTURE</SectionLabel>
-      <h2 className="text-[40px] font-bold text-center">Designed for extensibility.</h2>
+      <h2 className="text-2xl md:text-[40px] font-bold text-center">Designed for extensibility.</h2>
 
       {/* Diagram */}
-      <div className="flex flex-col items-center gap-4 w-[800px] border border-[var(--color-border)] bg-[var(--color-bg)] p-8">
+      <div className="flex flex-col items-center gap-4 w-full max-w-[800px] border border-[var(--color-border)] bg-[var(--color-bg)] p-4 md:p-8">
         <div className="border border-[var(--color-border)] bg-[var(--color-surface)] px-6 py-2.5">
           <span className="font-mono text-xs font-semibold text-[var(--color-text)]">CLI / API</span>
         </div>
@@ -40,10 +40,10 @@ export default function Architecture() {
           <span className="font-mono text-xs font-semibold text-[var(--color-accent)]">Temporal Workflow</span>
         </div>
         <div className="w-px h-5 bg-[var(--color-border)]" />
-        <div className="flex gap-3 justify-center">
+        <div className="flex flex-wrap gap-2 md:gap-3 justify-center">
           {["Cartographer", "Specular", "Architect", "Judge"].map((a) => (
-            <div key={a} className="border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
-              <span className="font-mono text-[11px] text-[var(--color-text-secondary)]">{a}</span>
+            <div key={a} className="border border-[var(--color-border)] bg-[var(--color-surface)] px-3 md:px-4 py-2">
+              <span className="font-mono text-[10px] md:text-[11px] text-[var(--color-text-secondary)]">{a}</span>
             </div>
           ))}
         </div>
@@ -52,26 +52,26 @@ export default function Architecture() {
           <span className="font-mono text-xs font-semibold text-[var(--color-text)]">Semantic Graph (IR)</span>
         </div>
         <div className="w-px h-5 bg-[var(--color-border)]" />
-        <div className="flex gap-3 justify-center">
+        <div className="flex flex-wrap gap-2 md:gap-3 justify-center">
           {[
             { icon: Database, label: "Neo4j" },
             { icon: Search, label: "Qdrant" },
             { icon: Brain, label: "LLM Provider" },
           ].map(({ icon: Icon, label }) => (
-            <div key={label} className="flex items-center gap-1.5 border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-2">
+            <div key={label} className="flex items-center gap-1.5 border border-[var(--color-border)] bg-[var(--color-surface)] px-3 md:px-4 py-2">
               <Icon size={14} className="text-[var(--color-blue)]" />
-              <span className="font-mono text-[11px] text-[var(--color-text-secondary)]">{label}</span>
+              <span className="font-mono text-[10px] md:text-[11px] text-[var(--color-text-secondary)]">{label}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Feature cards */}
-      <div className="flex gap-4 w-full">
+      <div className="flex flex-col md:flex-row gap-4 w-full">
         {features.map(({ icon: Icon, title, desc }) => (
           <div
             key={title}
-            className="flex-1 flex flex-col gap-3 p-6 border border-[var(--color-border)] bg-[var(--color-bg)]"
+            className="flex-1 flex flex-col gap-3 p-5 md:p-6 border border-[var(--color-border)] bg-[var(--color-bg)]"
           >
             <Icon size={20} className="text-[var(--color-accent)]" />
             <span className="text-base font-semibold text-[var(--color-text)]">{title}</span>

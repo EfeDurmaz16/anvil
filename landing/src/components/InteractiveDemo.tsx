@@ -14,7 +14,7 @@ const pipelineStages = [
 
 const tabs = [
   {
-    label: "Calculator (Simple)",
+    label: "Calculator",
     file: "calculator.cbl",
     code: `       IDENTIFICATION DIVISION.
        PROGRAM-ID. CALCULATOR.
@@ -54,7 +54,7 @@ public class Calculator {
     ],
   },
   {
-    label: "CardDemo - Sign On",
+    label: "CardDemo",
     file: "cosgn00c.cbl",
     code: `       IDENTIFICATION DIVISION.
        PROGRAM-ID. COSGN00C.
@@ -104,7 +104,7 @@ public class SignOnController {
     ],
   },
   {
-    label: "Full Project (Scale)",
+    label: "Full Project",
     file: "carddemo/",
     code: `# AWS CardDemo — Enterprise Credit Card System
 # 61 COBOL source files
@@ -198,19 +198,19 @@ export default function InteractiveDemo() {
   return (
     <section
       id="demo"
-      className="flex flex-col items-center gap-12 px-[120px] py-20 transition-colors"
+      className="flex flex-col items-center gap-8 md:gap-12 px-4 md:px-[120px] py-12 md:py-20 transition-colors"
       style={{ backgroundColor: "var(--color-surface-alt)", borderTop: "1px solid var(--color-border)", borderBottom: "1px solid var(--color-border)" }}
     >
       <SectionLabel>INTERACTIVE DEMO</SectionLabel>
-      <h2 className="text-[40px] font-bold text-center" style={{ color: "var(--color-text)" }}>See it work. Right now.</h2>
+      <h2 className="text-2xl md:text-[40px] font-bold text-center" style={{ color: "var(--color-text)" }}>See it work. Right now.</h2>
 
       {/* Tabs */}
-      <div className="flex w-full" style={{ borderBottom: "1px solid var(--color-border)" }}>
+      <div className="flex w-full overflow-x-auto" style={{ borderBottom: "1px solid var(--color-border)" }}>
         {tabs.map((t, i) => (
           <button
             key={i}
             onClick={() => handleTabChange(i)}
-            className="font-mono text-xs px-6 py-3 transition-colors"
+            className="font-mono text-[11px] md:text-xs px-4 md:px-6 py-3 transition-colors whitespace-nowrap shrink-0"
             style={{
               color: i === active ? "var(--color-text)" : "var(--color-text-secondary)",
               backgroundColor: i === active ? "var(--color-surface)" : "transparent",
@@ -224,9 +224,9 @@ export default function InteractiveDemo() {
       </div>
 
       {/* Body */}
-      <div className="flex w-full gap-0">
+      <div className="flex flex-col md:flex-row w-full gap-0">
         {/* Code pane */}
-        <div className="flex-1 p-5 flex flex-col gap-3" style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-bg)" }}>
+        <div className="flex-1 p-4 md:p-5 flex flex-col gap-3" style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-bg)" }}>
           <div className="flex items-center justify-between">
             <span className="font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
               {tab.file}
@@ -234,7 +234,7 @@ export default function InteractiveDemo() {
             <button
               onClick={handleRun}
               disabled={runState === "running"}
-              className="flex items-center gap-2 bg-[var(--color-accent)] text-black font-mono text-[11px] font-semibold px-4 py-1.5 hover:brightness-110 transition disabled:opacity-60"
+              className="flex items-center gap-2 bg-[var(--color-accent)] text-black font-mono text-[11px] font-semibold px-3 md:px-4 py-1.5 hover:brightness-110 transition disabled:opacity-60"
             >
               {runState === "running" ? <Loader2 size={12} className="animate-spin" /> : runState === "done" ? <CheckCircle2 size={12} /> : <Play size={12} />}
               {runState === "running" ? "Running..." : runState === "done" ? "Complete" : "Run Anvil"}
@@ -243,37 +243,35 @@ export default function InteractiveDemo() {
           <div className="h-px" style={{ backgroundColor: "var(--color-border)" }} />
 
           {runState === "idle" ? (
-            <pre className="font-mono text-xs leading-[1.7] whitespace-pre overflow-x-auto" style={{ color: "var(--color-text-secondary)" }}>
+            <pre className="font-mono text-[10px] md:text-xs leading-[1.7] whitespace-pre overflow-x-auto" style={{ color: "var(--color-text-secondary)" }}>
               {tab.code}
             </pre>
           ) : (
             <div className="flex flex-col gap-3">
-              {/* Pipeline stages */}
               <div className="flex flex-col gap-1.5">
                 {pipelineStages.map((s, i) => (
-                  <div key={i} className="flex items-center gap-2 font-mono text-[11px]">
+                  <div key={i} className="flex items-center gap-2 font-mono text-[10px] md:text-[11px]">
                     {i < stageIndex ? (
-                      <CheckCircle2 size={12} className="text-[var(--color-green)]" />
+                      <CheckCircle2 size={12} className="text-[var(--color-green)] shrink-0" />
                     ) : i === stageIndex && runState === "running" ? (
-                      <Loader2 size={12} className="text-[var(--color-accent)] animate-spin" />
+                      <Loader2 size={12} className="text-[var(--color-accent)] animate-spin shrink-0" />
                     ) : (
-                      <span className="w-3 h-3 rounded-full" style={{ border: "1px solid var(--color-border)" }} />
+                      <span className="w-3 h-3 rounded-full shrink-0" style={{ border: "1px solid var(--color-border)" }} />
                     )}
                     <span style={{ color: i <= stageIndex ? "var(--color-text)" : "var(--color-text-muted)" }}>
                       [{s.agent}]
                     </span>
-                    <span style={{ color: i <= stageIndex ? "var(--color-text-secondary)" : "var(--color-text-muted)" }}>
+                    <span className="truncate" style={{ color: i <= stageIndex ? "var(--color-text-secondary)" : "var(--color-text-muted)" }}>
                       {s.action}
                     </span>
                   </div>
                 ))}
               </div>
 
-              {/* Output */}
               {outputLines.length > 0 && (
                 <>
                   <div className="h-px" style={{ backgroundColor: "var(--color-border)" }} />
-                  <pre className="font-mono text-xs leading-[1.7] whitespace-pre overflow-x-auto" style={{ color: "var(--color-code-green)" }}>
+                  <pre className="font-mono text-[10px] md:text-xs leading-[1.7] whitespace-pre overflow-x-auto" style={{ color: "var(--color-code-green)" }}>
                     {outputLines.join("\n")}
                   </pre>
                 </>
@@ -283,20 +281,22 @@ export default function InteractiveDemo() {
         </div>
 
         {/* Metrics sidebar */}
-        <div className="w-[200px] p-5 flex flex-col gap-4" style={{ border: "1px solid var(--color-border)", borderLeft: "none", backgroundColor: "var(--color-surface)" }}>
-          <span className="font-mono text-[10px] font-semibold tracking-[2px] text-[var(--color-accent)]">
+        <div className="flex md:flex-col gap-4 p-4 md:p-5 md:w-[200px] border border-t-0 md:border-t md:border-l-0 border-[var(--color-border)]" style={{ backgroundColor: "var(--color-surface)" }}>
+          <span className="font-mono text-[10px] font-semibold tracking-[2px] text-[var(--color-accent)] hidden md:block">
             METRICS
           </span>
-          {tab.metrics.map((m, i) => (
-            <div key={i} className="flex flex-col gap-0.5">
-              <span className={`font-mono text-xl font-bold ${m.green ? "text-[var(--color-green)]" : ""}`} style={m.green ? {} : { color: "var(--color-text)" }}>
-                {m.value}
-              </span>
-              <span className="font-mono text-[10px]" style={{ color: "var(--color-text-secondary)" }}>
-                {m.label}
-              </span>
-            </div>
-          ))}
+          <div className="flex md:flex-col gap-4 md:gap-4 flex-1">
+            {tab.metrics.map((m, i) => (
+              <div key={i} className="flex flex-col gap-0.5">
+                <span className={`font-mono text-lg md:text-xl font-bold ${m.green ? "text-[var(--color-green)]" : ""}`} style={m.green ? {} : { color: "var(--color-text)" }}>
+                  {m.value}
+                </span>
+                <span className="font-mono text-[10px]" style={{ color: "var(--color-text-secondary)" }}>
+                  {m.label}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </section>
