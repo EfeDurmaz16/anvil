@@ -1,0 +1,75 @@
+"use client";
+
+import { motion } from "framer-motion";
+import SectionLabel from "./SectionLabel";
+
+const rows = [
+  { name: "AWS CardDemo", files: "61", modules: "29", fns: "546", types: "2,032", java: "60", time: "318ms" },
+  { name: "CobolCraft", files: "311", modules: "206", fns: "423", types: "1,363", java: "270", time: "462ms" },
+  { name: "COBOL Library", files: "126", modules: "28", fns: "54", types: "226", java: "30", time: "17ms" },
+  { name: "COBOL Check", files: "413", modules: "2", fns: "12", types: "21", java: "7", time: "20ms" },
+  { name: "Programming Course", files: "3", modules: "3", fns: "24", types: "82", java: "5", time: "12ms" },
+  { name: "COBOL Unit Test", files: "153", modules: "2", fns: "2", types: "44", java: "4", time: "30ms" },
+  { name: "COBOL is Fun", files: "51", modules: "2", fns: "3", types: "78", java: "4", time: "4ms" },
+];
+
+const cols = [
+  { key: "name", label: "Project", w: "w-[160px]" },
+  { key: "files", label: "Files", w: "w-[60px]" },
+  { key: "modules", label: "Modules", w: "w-[70px]" },
+  { key: "fns", label: "Functions", w: "w-[80px]" },
+  { key: "types", label: "Data Types", w: "w-[90px]" },
+  { key: "java", label: "Java Files", w: "w-[80px]" },
+  { key: "time", label: "Time", w: "w-[70px]" },
+] as const;
+
+export default function BenchmarkResults() {
+  return (
+    <section id="benchmarks" className="flex flex-col items-center gap-12 px-[120px] py-20 transition-colors" style={{ backgroundColor: "var(--color-bg)" }}>
+      <SectionLabel>BENCHMARKS</SectionLabel>
+      <h2 className="text-[40px] font-bold text-center" style={{ color: "var(--color-text)" }}>Battle-tested on real mainframe code.</h2>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.5 }}
+        className="inline-flex flex-col transition-colors"
+        style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-card-bg)" }}
+      >
+        {/* Header */}
+        <div className="flex px-5 py-3" style={{ borderBottom: "1px solid var(--color-border)" }}>
+          {cols.map((c) => (
+            <span key={c.key} className={`${c.w} font-mono text-[10px] font-semibold`} style={{ color: "var(--color-text-secondary)" }}>
+              {c.label}
+            </span>
+          ))}
+        </div>
+        {/* Rows */}
+        {rows.map((r, i) => (
+          <div
+            key={i}
+            className="flex px-5 py-3 transition-colors"
+            style={{
+              borderBottom: i < rows.length - 1 ? "1px solid var(--color-border)" : undefined,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--color-surface)")}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "")}
+          >
+            <span className="w-[160px] font-mono text-[11px] font-medium" style={{ color: "var(--color-text)" }}>{r.name}</span>
+            <span className="w-[60px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.files}</span>
+            <span className="w-[70px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.modules}</span>
+            <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.fns}</span>
+            <span className="w-[90px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.types}</span>
+            <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.java}</span>
+            <span className="w-[70px] font-mono text-[11px] font-medium text-[var(--color-table-green)]">{r.time}</span>
+          </div>
+        ))}
+      </motion.div>
+
+      <p className="font-mono text-sm font-semibold text-center" style={{ color: "var(--color-text)" }}>
+        1,118 files &rarr; 380 Java classes in under 1 second. Zero API calls. Zero cloud dependencies.
+      </p>
+    </section>
+  );
+}
