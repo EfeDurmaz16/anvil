@@ -1,0 +1,26 @@
+llm:
+  provider: anthropic
+  model: claude-sonnet-4-20250514
+  api_key: ""
+  base_url: ""
+  temperature: 0.2
+  max_tokens: 4096
+
+graph:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: password
+
+vector:
+  host: localhost
+  port: 6334
+  collection: anvil
+
+temporal:
+  host: localhost:7233
+  namespace: default
+  task_queue: anvil-tasks
+
+log:
+  level: info
+  format: json
