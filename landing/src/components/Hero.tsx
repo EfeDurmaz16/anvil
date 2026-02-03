@@ -67,12 +67,12 @@ export default function Hero() {
         className="font-mono text-sm md:text-base text-center max-w-[700px] leading-relaxed px-2"
         style={{ color: "var(--color-text-dim)" }}
       >
-        Anvil is an open-source multi-agent platform that reads your COBOL,
+        Anvil is an open-source multi-agent platform that reads your COBOL, Perl, or Fortran,
         understands the business logic, and writes production-grade Java Spring Boot.
       </motion.p>
 
       <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-        <a href="#demo" className="flex items-center justify-center gap-2.5 bg-[var(--color-accent)] text-black font-mono text-sm font-semibold px-7 py-3.5 hover:brightness-110 transition">
+        <a href="/demo" className="flex items-center justify-center gap-2.5 bg-[var(--color-accent)] text-black font-mono text-sm font-semibold px-7 py-3.5 hover:brightness-110 transition">
           <Play size={18} /> Try the Demo
         </a>
         <a href="https://github.com/EfeDurmaz16/anvil" target="_blank" rel="noopener noreferrer"
