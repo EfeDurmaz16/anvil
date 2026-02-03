@@ -1,0 +1,36 @@
+# Anvil
+
+> Open-source multi-agent platform that modernizes legacy code (COBOL, Perl, Fortran) into production-grade Java Spring Boot.
+
+## Overview
+
+Anvil is a CLI tool and multi-agent system that reads legacy source code, understands the business logic through AI analysis, and generates modern, idiomatic Java Spring Boot applications.
+
+## Key Features
+
+- Multi-agent pipeline: Cartographer, Specular, Architect, Judge
+- Supports COBOL, Perl, and Fortran as source languages
+- Generates Java Spring Boot with proper type mapping
+- Works offline with template-based generation (LLM optional)
+- Built on Temporal.io for production-grade orchestration
+
+## Quick Start
+
+```bash
+go install github.com/efebarandurmaz/anvil/cmd/anvil@latest
+
+anvil run --source cobol --target java \
+    --input ./your-cobol-src \
+    --output ./generated-java
+```
+
+## Documentation
+
+- Home: https://anvil-landing-one.vercel.app/
+- Interactive Demo: https://anvil-landing-one.vercel.app/demo
+- Documentation: https://anvil-landing-one.vercel.app/docs
+- GitHub: https://github.com/EfeDurmaz16/anvil
+
+## For More Information
+
+See llms-full.txt for comprehensive documentation suitable for AI agents.

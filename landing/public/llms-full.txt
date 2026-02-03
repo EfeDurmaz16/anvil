@@ -1,0 +1,216 @@
+# Anvil - Complete Documentation for AI Agents
+
+> Open-source multi-agent platform that modernizes legacy code (COBOL, Perl, Fortran) into production-grade Java Spring Boot.
+
+## Project Overview
+
+Anvil is an open-source CLI tool and multi-agent system designed to modernize legacy mainframe and scientific codebases. It reads legacy source code written in COBOL, Perl, or Fortran, analyzes the business logic using AI, and generates modern, idiomatic Java Spring Boot applications.
+
+### Why Anvil Exists
+
+Legacy mainframe systems running COBOL still power critical infrastructure in banking, insurance, healthcare, and government. These systems are reliable but increasingly difficult to maintain as the workforce that built them retires. Anvil bridges this gap by automatically translating legacy code into modern Java while preserving the original business logic.
+
+## Architecture
+
+### Multi-Agent Pipeline
+
+Anvil uses a pipeline of four specialized AI agents:
+
+#### 1. Cartographer (Parse & Map)
+- Reads source files and builds a complete semantic graph
+- Extracts modules, functions, data types, call graphs, control flow, and I/O contracts
+- Uses tree-sitter for parsing (no LLM required)
+- Parses fixed-format COBOL (columns 1-72) with Area A/B detection
+- Extracts IDENTIFICATION, DATA, and PROCEDURE divisions
+- Builds call graphs from PERFORM, CALL, and GO TO statements
+- Maps PIC clauses to typed IR nodes (PIC 9 → numeric, PIC X → string)
+- Resolves COPY/INCLUDE copybook dependencies
+- Detects EXEC CICS and EXEC SQL blocks for I/O classification
+- Stores semantic graph in Neo4j and generates vector embeddings in Qdrant
+
+#### 2. Specular (Extract Business Rules)
+- Uses LLM to analyze the semantic graph
+- Extracts business rules, validation logic, and domain patterns
+- Queries the semantic graph for complex conditional logic
+- Identifies business rules embedded in EVALUATE/IF chains
+- Extracts validation patterns (field-level, cross-field, temporal)
+- Documents domain-specific terminology and naming conventions
+- Scores complexity per function to prioritize review
+- Works without LLM in template-only mode (rules are skipped)
+
+#### 3. Architect (Generate Modern Code)
+- Transforms the enriched IR into idiomatic Java Spring Boot
+- Maps COBOL data types to Java types:
+  - PIC 9 → int/long/BigDecimal
+  - PIC X → String
+- Generates @Service, @RestController, @Repository classes
+- Creates Spring Boot project structure (controller/service/model/repository)
+- Uses LLM for complex logic translation when available
+- Falls back to template-based generation in offline mode
+- Generates unit test stubs alongside production code
+- Preserves original comments as Javadoc annotations
+
+#### 4. Judge (Verify Equivalence)
+- Validates that generated Java preserves original semantics
+- Compares input/output contracts between source and target
+- Verifies type mapping correctness (no precision loss)
+- Checks that all business rules are preserved
+- Runs generated Java through compilation check
+- Scores semantic equivalence on a 0-1 scale (threshold: 0.85)
+- On failure, provides detailed feedback to Architect for retry
+- Retry loop runs up to 3 times before reporting partial success
+
+## Supported Languages
+
+### Source Languages
+- **COBOL** - Full support including CICS, DB2/SQL, copybooks, BMS maps
+- **Perl** - Package modules, DBI database calls, file I/O
+- **Fortran** - Modules, subroutines, functions, array operations
+
+### Target Languages
+- **Java Spring Boot** - REST controllers, JPA entities, Spring Data repositories
+
+## Installation
+
+### Using Go Install
+```bash
+go install github.com/efebarandurmaz/anvil/cmd/anvil@latest
+```
+
+### Building from Source
+```bash
+git clone https://github.com/EfeDurmaz16/anvil.git
+cd anvil
+make build
+./bin/anvil --version
+```
+
+### Requirements
+- Go 1.21 or later
+- Zero external runtime dependencies for basic operation
+
+### Optional Dependencies (for full functionality)
+- **Temporal.io** - Workflow orchestration (required for production pipelines)
+- **Neo4j** - Graph database for semantic graph storage
+- **Qdrant** - Vector database for semantic search and embeddings
+
+## Usage
+
+### Basic Command
+```bash
+anvil run --source cobol --target java \
+    --input ./your-cobol-src \
+    --output ./generated-java
+```
+
+### CLI Reference
+```
+anvil run [flags]
+
+Flags:
+  --source string    Source language (default "cobol")
+  --target string    Target language (default "java")
+  --input string     Input directory or file (required)
+  --output string    Output directory (required)
+  --config string    Config file path (default "anvil.yaml")
+  --json             Output results as JSON
+  --verbose          Enable verbose logging
+  --dry-run          Parse and analyze without generating code
+```
+
+### Configuration File (anvil.yaml)
+```yaml
+llm:
+  provider: anthropic       # anthropic | openai | groq | ollama
+  api_key: ${ANTHROPIC_API_KEY}
+  model: claude-sonnet-4-20250514
+  temperature: 0.1
+  max_tokens: 4096
+
+source:
+  language: cobol
+  encoding: utf-8
+
+target:
+  language: java
+  framework: spring-boot
+  java_version: 17
+
+pipeline:
+  max_retries: 3            # Architect-Judge retry limit
+  quality_threshold: 0.85   # Judge pass threshold (0-1)
+
+storage:
+  neo4j:
+    uri: bolt://localhost:7687
+    username: neo4j
+    password: ${NEO4J_PASSWORD}
+  qdrant:
+    host: localhost
+    port: 6334
+
+temporal:
+  host: localhost:7233
+  namespace: anvil
+  task_queue: modernization
+```
+
+## LLM Providers
+
+Anvil supports multiple LLM providers through a unified interface:
+- Anthropic (Claude)
+- OpenAI (GPT-4)
+- Groq
+- Ollama (local)
+- vLLM
+
+**Important:** LLM is optional. Anvil works fully offline with template-based generation. The Cartographer and Architect agents can run without any LLM. Adding an LLM provider enables business rule extraction via Specular and improves code quality.
+
+## Example Transformations
+
+### COBOL Calculator → Java Service
+Input: COBOL with PIC 9(7)V99 decimal types and COMPUTE statements
+Output: Java @Service with BigDecimal arithmetic
+
+### CICS Sign-On → REST Controller
+Input: COBOL CICS program with EXEC CICS RECEIVE/SEND and BMS maps
+Output: Java @RestController with @PostMapping, DTOs, and ResponseEntity
+
+### Batch Report → Scheduled Service
+Input: COBOL batch program with sequential file I/O
+Output: Java @Scheduled service with JPA repositories and Stream collectors
+
+### DB2 CRUD → JPA Repository
+Input: COBOL with EXEC SQL INSERT/UPDATE/DELETE/SELECT
+Output: Java @RestController with Spring Data JPA
+
+### Perl Bugzilla → Spring Service
+Input: Perl package with DBI database calls and file I/O
+Output: Java @Service with JPA repositories and SLF4J logging
+
+### Fortran Linear Algebra → Java Service
+Input: Fortran module with subroutines and array operations
+Output: Java @Service with double[][] matrix operations
+
+## Benchmarks
+
+Enterprise-scale transformation of AWS CardDemo (61 COBOL files):
+- 29 modules processed
+- 546 functions mapped
+- 2,032 data types converted
+- 184 SQL statements → JPA queries
+- 267 CICS calls → REST endpoints
+- Judge verification score: 0.97
+
+## Links
+
+- **Website:** https://anvil-landing-one.vercel.app/
+- **Interactive Demo:** https://anvil-landing-one.vercel.app/demo
+- **Documentation:** https://anvil-landing-one.vercel.app/docs
+- **GitHub Repository:** https://github.com/EfeDurmaz16/anvil
+- **License:** MIT
+
+## Contact
+
+For issues and feature requests, please use the GitHub issue tracker:
+https://github.com/EfeDurmaz16/anvil/issues

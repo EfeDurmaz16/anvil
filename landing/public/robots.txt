@@ -1,0 +1,13 @@
+# Anvil - Legacy Code Modernization Platform
+# https://github.com/EfeDurmaz16/anvil
+
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://anvil-landing-one.vercel.app/sitemap.xml
+
+# LLM-friendly content
+# See llms.txt for AI agent instructions
+# https://anvil-landing-one.vercel.app/llms.txt
+# https://anvil-landing-one.vercel.app/llms-full.txt
