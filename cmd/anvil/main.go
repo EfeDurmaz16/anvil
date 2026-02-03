@@ -19,6 +19,8 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/metrics"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 	cobolplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/cobol"
+	fortranplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/fortran"
+	perlplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/perl"
 	javaplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/java"
 	"github.com/spf13/cobra"
 )
@@ -92,6 +94,8 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 
 	registry := plugins.NewRegistry()
 	registry.RegisterSource(cobolplugin.New())
+	registry.RegisterSource(perlplugin.New())
+	registry.RegisterSource(fortranplugin.New())
 	registry.RegisterTarget(javaplugin.New())
 
 	// Build LLM provider via factory
