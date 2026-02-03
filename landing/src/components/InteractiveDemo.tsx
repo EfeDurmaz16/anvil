@@ -14,7 +14,7 @@ const pipelineStages = [
 
 const tabs = [
   {
-    label: "Calculator",
+    label: "COBOL",
     file: "calculator.cbl",
     code: `       IDENTIFICATION DIVISION.
        PROGRAM-ID. CALCULATOR.
@@ -54,57 +54,133 @@ public class Calculator {
     ],
   },
   {
-    label: "CardDemo",
-    file: "cosgn00c.cbl",
-    code: `       IDENTIFICATION DIVISION.
-       PROGRAM-ID. COSGN00C.
-       DATA DIVISION.
-       WORKING-STORAGE SECTION.
-       01 WS-USERID    PIC X(8).
-       01 WS-PASSWORD  PIC X(8).
-       PROCEDURE DIVISION.
-       0000-MAIN.
-           EXEC CICS RECEIVE
-              MAP('COSGN0A')
-              MAPSET('COSGN00')
-           END-EXEC.
-           PERFORM 1000-VALIDATE.
-           STOP RUN.
-       1000-VALIDATE.
-           IF WS-USERID = SPACES
-              DISPLAY "INVALID USER"
-           END-IF.`,
-    output: `@RestController
-@RequestMapping("/auth")
-public class SignOnController {
-    private String wsUserid;
-    private String wsPassword;
+    label: "Perl",
+    file: "BugReport.pm",
+    code: `package Bugzilla::BugReport;
+use strict;
+use warnings;
 
-    @PostMapping("/login")
-    public ResponseEntity<?> main(
-            @RequestBody LoginRequest req) {
-        this.wsUserid = req.getUserid();
-        this.wsPassword = req.getPassword();
-        return validate();
+use Bugzilla::DB;
+use Bugzilla::User;
+
+our $VERSION = '1.0';
+
+sub new {
+    my ($class, $id) = @_;
+    my $self = { id => $id };
+    return bless $self, $class;
+}
+
+sub fetch_bug {
+    my ($self) = @_;
+    my $dbh = Bugzilla->dbh;
+    my $sth = $dbh->prepare(
+        "SELECT * FROM bugs WHERE id = ?"
+    );
+    $sth->execute($self->{id});
+    return $sth->fetchrow_hashref;
+}
+
+sub update_status {
+    my ($self, $status) = @_;
+    open(my $fh, '>>', 'audit.log');
+    print $fh "Bug $self->{id}: $status\\n";
+    close($fh);
+}
+
+1;`,
+    output: `@Service
+public class BugReportService {
+
+    private final BugRepository bugRepo;
+    private final AuditLogger auditLogger;
+
+    public BugReportService(BugRepository repo,
+            AuditLogger logger) {
+        this.bugRepo = repo;
+        this.auditLogger = logger;
     }
 
-    private ResponseEntity<?> validate() {
-        if (wsUserid == null || wsUserid.isBlank()) {
-            return ResponseEntity.badRequest()
-                .body("INVALID USER");
+    public Optional<Bug> fetchBug(Long id) {
+        return bugRepo.findById(id);
+    }
+
+    public void updateStatus(Long id, String status) {
+        auditLogger.log(
+            "Bug " + id + ": " + status);
+    }
+}`,
+    metrics: [
+      { value: "1", label: "module" },
+      { value: "3", label: "functions" },
+      { value: "4", label: "data types" },
+      { value: "2ms", label: "processing", green: true },
+    ],
+  },
+  {
+    label: "Fortran",
+    file: "matrix_ops.f90",
+    code: `module matrix_operations
+  implicit none
+  integer, parameter :: MAX_SIZE = 100
+
+contains
+
+  subroutine multiply(A, B, C, n)
+    integer, intent(in) :: n
+    real, intent(in) :: A(n,n), B(n,n)
+    real, intent(out) :: C(n,n)
+    integer :: i, j, k
+
+    do i = 1, n
+      do j = 1, n
+        C(i,j) = 0.0
+        do k = 1, n
+          C(i,j) = C(i,j) + A(i,k)*B(k,j)
+        end do
+      end do
+    end do
+  end subroutine multiply
+
+  real function determinant(M, n)
+    integer, intent(in) :: n
+    real, intent(in) :: M(n,n)
+    determinant = M(1,1)*M(2,2) - M(1,2)*M(2,1)
+  end function determinant
+
+end module matrix_operations`,
+    output: `@Service
+public class MatrixOperations {
+
+    private static final int MAX_SIZE = 100;
+
+    public double[][] multiply(
+            double[][] a, double[][] b, int n) {
+        double[][] c = new double[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                c[i][j] = 0.0;
+                for (int k = 0; k < n; k++) {
+                    c[i][j] += a[i][k] * b[k][j];
+                }
+            }
         }
-        return ResponseEntity.ok().build();
+        return c;
+    }
+
+    public double determinant(double[][] m, int n) {
+        return m[0][0]*m[1][1] - m[0][1]*m[1][0];
     }
 }`,
     metrics: [
       { value: "1", label: "module" },
       { value: "2", label: "functions" },
-      { value: "4", label: "data types" },
-      { value: "3ms", label: "processing", green: true },
+      { value: "3", label: "data types" },
+      { value: "2ms", label: "processing", green: true },
     ],
   },
   {
-    label: "Full Project",
+    label: "CardDemo (61 files)",
     file: "carddemo/",
     code: `# AWS CardDemo — Enterprise Credit Card System
 # 61 COBOL source files
