@@ -142,7 +142,7 @@ func (s *ShutdownHandler) ShutdownCh() <-chan struct{} {
 	return s.shutdownCh
 }
 
-func (s *ShutdownHandler) shutdown(sig os.Signal) {
+func (s *ShutdownHandler) shutdown(_ os.Signal) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
 
