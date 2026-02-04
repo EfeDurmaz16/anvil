@@ -1,6 +1,9 @@
 package harness
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -443,42 +446,47 @@ func TestDBSnapshot_Basic(t *testing.T) {
 
 func TestDefaultRunnerConfig(t *testing.T) {
 	cfg := DefaultRunnerConfig()
-
 	if cfg.Timeout != 5*time.Minute {
 		t.Fatalf("expected 5 minute timeout, got %v", cfg.Timeout)
-	}
-	if cfg.WorkDir != "/tmp/anvil-harness" {
-		t.Fatalf("expected default workdir, got %s", cfg.WorkDir)
 	}
 	if cfg.Env == nil {
 		t.Fatal("expected non-nil env map")
 	}
 }
 
-func TestCOBOLRunner_Name(t *testing.T) {
-	r := NewCOBOLRunner(nil)
-	if r.Name() != "cobol" {
-		t.Fatalf("expected 'cobol', got %s", r.Name())
+func TestManifestRunner_Smoke(t *testing.T) {
+	dir := t.TempDir()
+	manifest := `{
+  "version": "1",
+  "language": "test",
+  "compile": [{"cmd": "go", "args": ["version"]}],
+  "run_fixture": {"cmd": "go", "args": ["env", "GOVERSION"]}
+}`
+	if err := os.WriteFile(filepath.Join(dir, ManifestFile), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
 	}
-}
 
-func TestTypeScriptRunner_Name(t *testing.T) {
-	r := NewTypeScriptRunner(nil)
-	if r.Name() != "typescript" {
-		t.Fatalf("expected 'typescript', got %s", r.Name())
+	r, err := NewManifestRunner(dir, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
 
-func TestPythonRunner_Name(t *testing.T) {
-	r := NewPythonRunner(nil)
-	if r.Name() != "python" {
-		t.Fatalf("expected 'python', got %s", r.Name())
+	cr, err := r.Compile(context.Background(), dir)
+	if err != nil {
+		t.Fatal(err)
 	}
-}
+	if !cr.Success {
+		t.Fatalf("expected compile success, got: %+v", cr)
+	}
 
-func TestGoRunner_Name(t *testing.T) {
-	r := NewGoRunner(nil)
-	if r.Name() != "golang" {
-		t.Fatalf("expected 'golang', got %s", r.Name())
+	rr, err := r.RunFixture(context.Background(), dir, Fixture{Kind: FixtureHTTP, Name: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rr.Success {
+		t.Fatalf("expected run success, got: %+v", rr)
+	}
+	if len(rr.Output.Stdout) == 0 {
+		t.Fatal("expected non-empty stdout")
 	}
 }
