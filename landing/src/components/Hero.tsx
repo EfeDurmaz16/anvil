@@ -18,20 +18,14 @@ PROCEDURE DIVISION.
     DISPLAY WS-INTEREST.
     STOP RUN.`;
 
-const javaCode = `@Service
-public class InterestService {
-
-  public BigDecimal calculate(
-      BigDecimal principal,
-      BigDecimal rate,
-      int years) {
-
-    return principal
-      .multiply(rate)
-      .multiply(BigDecimal.valueOf(years))
-      .divide(BigDecimal.valueOf(100),
-        2, RoundingMode.HALF_UP);
-  }
+const tsCode = `// Target: TypeScript (example)
+// Use bigint cents + basis points to avoid floating point drift.
+export function calculateInterest(
+  principalCents: bigint,
+  rateBps: bigint,
+  years: number,
+): bigint {
+  return (principalCents * rateBps * BigInt(years)) / 10_000n;
 }`;
 
 const fadeUp = {
@@ -68,7 +62,7 @@ export default function Hero() {
         style={{ color: "var(--color-text-dim)" }}
       >
         Anvil is an open-source multi-agent platform that reads your COBOL, Perl, or Fortran,
-        understands the business logic, and writes production-grade Java Spring Boot.
+        extracts the business logic, and generates modern TypeScript, Python, or Go — on‑prem or in your VPC.
       </motion.p>
 
       <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
@@ -101,10 +95,10 @@ export default function Hero() {
         <div className="flex-1 p-4 md:p-5 transition-colors" style={{ border: "1px solid var(--color-border-light)", backgroundColor: "var(--color-card-bg)" }}>
           <div className="flex items-center gap-2 mb-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: "var(--color-code-green)" }} />
-            <span className="font-mono text-[11px] font-medium" style={{ color: "var(--color-text-dim)" }}>InterestService.java — Generated</span>
+            <span className="font-mono text-[11px] font-medium" style={{ color: "var(--color-text-dim)" }}>interest.ts — Generated</span>
           </div>
           <div className="h-px mb-3" style={{ backgroundColor: "var(--color-border-light)" }} />
-          <pre className="font-mono text-[10px] md:text-xs leading-[1.7] whitespace-pre overflow-x-auto" style={{ color: "var(--color-code-green)" }}>{javaCode}</pre>
+          <pre className="font-mono text-[10px] md:text-xs leading-[1.7] whitespace-pre overflow-x-auto" style={{ color: "var(--color-code-green)" }}>{tsCode}</pre>
         </div>
       </motion.div>
     </section>

@@ -7,7 +7,7 @@ const stats = [
   { value: 272, label: "modules analyzed" },
   { value: 1064, label: "functions extracted" },
   { value: 3846, label: "data types mapped" },
-  { value: 380, label: "Java files generated" },
+  { value: 380, label: "target files generated" },
 ];
 
 export default function StatsBanner() {

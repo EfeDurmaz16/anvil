@@ -12,7 +12,7 @@ const features = [
   {
     icon: Plug,
     title: "Source/Target Plugins",
-    desc: "COBOL \u2192 Java today. The plugin interface supports any source language and any target. RPG, PL/I, Fortran \u2014 bring your own parser.",
+    desc: "Generate TypeScript, Python, Go (and more). The plugin interface supports any source language and any target. Add a new target by implementing a TargetPlugin.",
   },
   {
     icon: Workflow,

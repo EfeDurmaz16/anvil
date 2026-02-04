@@ -1,14 +1,14 @@
 # Anvil - Complete Documentation for AI Agents
 
-> Open-source multi-agent platform that modernizes legacy code (COBOL, Perl, Fortran) into production-grade Java Spring Boot.
+> Open-source multi-agent platform that modernizes legacy code (COBOL, Perl, Fortran) into modern TypeScript, Python, or Go — with enterprise regression gates and proof packs.
 
 ## Project Overview
 
-Anvil is an open-source CLI tool and multi-agent system designed to modernize legacy mainframe and scientific codebases. It reads legacy source code written in COBOL, Perl, or Fortran, analyzes the business logic using AI, and generates modern, idiomatic Java Spring Boot applications.
+Anvil is an open-source CLI tool and multi-agent system designed to modernize legacy mainframe and server codebases. It reads legacy source code written in COBOL, Perl, or Fortran, extracts the business logic, and generates modern target code via pluggable target plugins (TypeScript/Python/Go/Java/etc.).
 
 ### Why Anvil Exists
 
-Legacy mainframe systems running COBOL still power critical infrastructure in banking, insurance, healthcare, and government. These systems are reliable but increasingly difficult to maintain as the workforce that built them retires. Anvil bridges this gap by automatically translating legacy code into modern Java while preserving the original business logic.
+Legacy systems still power critical infrastructure in banking and telecom. Modernization is not just codegen: enterprise buyers require verifiable behavior equivalence, traceability, and on‑prem/VPC deployment options. Anvil targets those needs with deterministic builds, regression gates, and evidence bundles (proof packs).
 
 ## Architecture
 
@@ -19,14 +19,14 @@ Anvil uses a pipeline of four specialized AI agents:
 #### 1. Cartographer (Parse & Map)
 - Reads source files and builds a complete semantic graph
 - Extracts modules, functions, data types, call graphs, control flow, and I/O contracts
-- Uses tree-sitter for parsing (no LLM required)
+- Tree-sitter parsing is optional (build tags); no LLM required
 - Parses fixed-format COBOL (columns 1-72) with Area A/B detection
 - Extracts IDENTIFICATION, DATA, and PROCEDURE divisions
 - Builds call graphs from PERFORM, CALL, and GO TO statements
 - Maps PIC clauses to typed IR nodes (PIC 9 → numeric, PIC X → string)
 - Resolves COPY/INCLUDE copybook dependencies
 - Detects EXEC CICS and EXEC SQL blocks for I/O classification
-- Stores semantic graph in Neo4j and generates vector embeddings in Qdrant
+- Optionally stores semantic graph in Neo4j and generates embeddings in Qdrant
 
 #### 2. Specular (Extract Business Rules)
 - Uses LLM to analyze the semantic graph
@@ -39,26 +39,18 @@ Anvil uses a pipeline of four specialized AI agents:
 - Works without LLM in template-only mode (rules are skipped)
 
 #### 3. Architect (Generate Modern Code)
-- Transforms the enriched IR into idiomatic Java Spring Boot
-- Maps COBOL data types to Java types:
-  - PIC 9 → int/long/BigDecimal
-  - PIC X → String
-- Generates @Service, @RestController, @Repository classes
-- Creates Spring Boot project structure (controller/service/model/repository)
-- Uses LLM for complex logic translation when available
+- Transforms the enriched IR into the chosen target runtime (TypeScript/Python/Go/…)
+- Emits `anvil.manifest.json` (compile + runner commands) so harness/orchestration stays target-agnostic
+- Uses an LLM for complex logic translation when available (local endpoints supported)
 - Falls back to template-based generation in offline mode
-- Generates unit test stubs alongside production code
-- Preserves original comments as Javadoc annotations
+- Preserves structure and naming for traceability
 
 #### 4. Judge (Verify Equivalence)
-- Validates that generated Java preserves original semantics
-- Compares input/output contracts between source and target
-- Verifies type mapping correctness (no precision loss)
-- Checks that all business rules are preserved
-- Runs generated Java through compilation check
-- Scores semantic equivalence on a 0-1 scale (threshold: 0.85)
-- On failure, provides detailed feedback to Architect for retry
-- Retry loop runs up to 3 times before reporting partial success
+- Validates that generated code preserves original semantics
+- Accepts structured LLM verdicts (strict JSON) when enabled
+- Combines semantic checks with regression gates (compile, fixtures/record-replay, DB diff)
+- Produces a proof pack (diffs, logs, metadata) for enterprise reviewers
+- On failure, provides feedback to Architect for retry
 
 ## Supported Languages
 
@@ -68,7 +60,10 @@ Anvil uses a pipeline of four specialized AI agents:
 - **Fortran** - Modules, subroutines, functions, array operations
 
 ### Target Languages
-- **Java Spring Boot** - REST controllers, JPA entities, Spring Data repositories
+- **TypeScript** - Node.js target runner + manifest
+- **Python** - module runner + manifest
+- **Go** - runner binary + manifest
+- **Java** - available via plugin (demo/legacy target)
 
 ## Installation
 
@@ -86,7 +81,7 @@ make build
 ```
 
 ### Requirements
-- Go 1.21 or later
+- Go version per `go.mod`
 - Zero external runtime dependencies for basic operation
 
 ### Optional Dependencies (for full functionality)
@@ -98,9 +93,14 @@ make build
 
 ### Basic Command
 ```bash
-anvil run --source cobol --target java \
+anvil run --source cobol --target typescript \
     --input ./your-cobol-src \
-    --output ./generated-java
+    --output ./generated
+```
+
+### Regression Gate (Harness)
+```bash
+anvil harness run --fixtures ./fixtures.jsonl --code ./generated --output ./proof-pack
 ```
 
 ### CLI Reference
@@ -112,85 +112,75 @@ Flags:
   --target string    Target language (default "java")
   --input string     Input directory or file (required)
   --output string    Output directory (required)
-  --config string    Config file path (default "anvil.yaml")
+  --config string    Config file path (default "configs/anvil.yaml")
   --json             Output results as JSON
-  --verbose          Enable verbose logging
-  --dry-run          Parse and analyze without generating code
 ```
 
 ### Configuration File (anvil.yaml)
 ```yaml
+# anvil.yaml (matches `configs/anvil.yaml` in the repo; env vars override with ANVIL_*).
 llm:
-  provider: anthropic       # anthropic | openai | groq | ollama
-  api_key: ${ANTHROPIC_API_KEY}
-  model: claude-sonnet-4-20250514
-  temperature: 0.1
+  # provider: anthropic, openai, groq, huggingface, ollama, together, deepseek, custom, none
+  provider: none
+  model: ""
+  api_key: ""
+  base_url: ""
+  temperature: 0.2
   max_tokens: 4096
 
-source:
-  language: cobol
-  encoding: utf-8
+graph:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: ${NEO4J_PASSWORD}
 
-target:
-  language: java
-  framework: spring-boot
-  java_version: 17
-
-pipeline:
-  max_retries: 3            # Architect-Judge retry limit
-  quality_threshold: 0.85   # Judge pass threshold (0-1)
-
-storage:
-  neo4j:
-    uri: bolt://localhost:7687
-    username: neo4j
-    password: ${NEO4J_PASSWORD}
-  qdrant:
-    host: localhost
-    port: 6334
+vector:
+  host: localhost
+  port: 6334
+  collection: anvil
 
 temporal:
   host: localhost:7233
-  namespace: anvil
-  task_queue: modernization
+  namespace: default
+  task_queue: anvil-tasks
+
+log:
+  level: info
+  format: json
 ```
+
+Target and source languages are selected via CLI/workflow input (e.g. `anvil run --source cobol --target typescript`).
 
 ## LLM Providers
 
-Anvil supports multiple LLM providers through a unified interface:
-- Anthropic (Claude)
-- OpenAI (GPT-4)
-- Groq
-- Ollama (local)
-- vLLM
+Anvil supports multiple LLM providers through a unified interface (including local OpenAI-compatible endpoints such as Ollama/vLLM).
 
 **Important:** LLM is optional. Anvil works fully offline with template-based generation. The Cartographer and Architect agents can run without any LLM. Adding an LLM provider enables business rule extraction via Specular and improves code quality.
 
 ## Example Transformations
 
-### COBOL Calculator → Java Service
+### COBOL Calculator → Modern Service
 Input: COBOL with PIC 9(7)V99 decimal types and COMPUTE statements
-Output: Java @Service with BigDecimal arithmetic
+Output: Target code (TypeScript/Python/Go) with safe numeric handling (example output varies per target)
 
-### CICS Sign-On → REST Controller
+### CICS Sign-On → Service/API Adapter
 Input: COBOL CICS program with EXEC CICS RECEIVE/SEND and BMS maps
-Output: Java @RestController with @PostMapping, DTOs, and ResponseEntity
+Output: Modern service boundary with equivalent request/response behavior (validated via record/replay)
 
-### Batch Report → Scheduled Service
+### Batch Report → Batch Runner
 Input: COBOL batch program with sequential file I/O
-Output: Java @Scheduled service with JPA repositories and Stream collectors
+Output: Target runner with deterministic inputs/outputs (validated via fixture diffs)
 
-### DB2 CRUD → JPA Repository
+### DB CRUD → Persistence Layer
 Input: COBOL with EXEC SQL INSERT/UPDATE/DELETE/SELECT
-Output: Java @RestController with Spring Data JPA
+Output: Target persistence adapter (exact framework depends on target/runtime)
 
-### Perl Bugzilla → Spring Service
+### Perl Bugzilla → Modern Service
 Input: Perl package with DBI database calls and file I/O
-Output: Java @Service with JPA repositories and SLF4J logging
+Output: Target service with equivalent side effects and audit behavior
 
-### Fortran Linear Algebra → Java Service
+### Fortran Linear Algebra → Compute Module
 Input: Fortran module with subroutines and array operations
-Output: Java @Service with double[][] matrix operations
+Output: Target compute module (TypeScript/Python/Go), preserving numerical behavior
 
 ## Benchmarks
 
@@ -198,9 +188,8 @@ Enterprise-scale transformation of AWS CardDemo (61 COBOL files):
 - 29 modules processed
 - 546 functions mapped
 - 2,032 data types converted
-- 184 SQL statements → JPA queries
-- 267 CICS calls → REST endpoints
-- Judge verification score: 0.97
+- SQL/CICS blocks mapped into target service boundaries (target-dependent)
+- Regression gates validate fixtures + DB diffs (proof pack produced)
 
 ## Links
 

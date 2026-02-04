@@ -5,23 +5,29 @@ import SectionLabel from "./SectionLabel";
 const terminalCode = `# Step 1: Install
 $ go install github.com/efebarandurmaz/anvil/cmd/anvil@latest
 
-# Step 2: Run (no config needed, works offline)
-$ anvil run --source cobol --target java \\
+# Step 2: Generate (offline by default)
+$ anvil run --source cobol --target typescript \\
   --input ./your-cobol-src \\
-  --output ./generated-java
+  --output ./generated
 
 # Step 3: See what happened
-$ anvil run --source cobol --target java \\
+$ anvil run --source cobol --target typescript \\
   --input ./your-cobol-src \\
-  --output ./generated-java \\
+  --output ./generated \\
   --json | jq .
 
-✓ 380 Java files generated in <1s`;
+# Step 4: Regression gate (fixtures → proof pack)
+$ anvil harness run --fixtures ./fixtures.jsonl \\
+  --code ./generated \\
+  --output ./proof-pack
+
+✓ Proof pack written to ./proof-pack/summary.json`;
 
 const yamlCode = `llm:
-  provider: anthropic  # or openai, groq, ollama
-  api_key: \${ANTHROPIC_API_KEY}
-  model: claude-sonnet-4-20250514`;
+  provider: ollama  # or openai, anthropic, groq, deepseek, ...
+  base_url: http://localhost:11434/v1
+  model: codellama
+  api_key: ""  # usually not needed for local endpoints`;
 
 export default function QuickStart() {
   return (

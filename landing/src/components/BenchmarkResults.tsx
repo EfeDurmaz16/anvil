@@ -4,13 +4,13 @@ import { motion } from "framer-motion";
 import SectionLabel from "./SectionLabel";
 
 const rows = [
-  { name: "AWS CardDemo", files: "61", modules: "29", fns: "546", types: "2,032", java: "60", time: "318ms" },
-  { name: "CobolCraft", files: "311", modules: "206", fns: "423", types: "1,363", java: "270", time: "462ms" },
-  { name: "COBOL Library", files: "126", modules: "28", fns: "54", types: "226", java: "30", time: "17ms" },
-  { name: "COBOL Check", files: "413", modules: "2", fns: "12", types: "21", java: "7", time: "20ms" },
-  { name: "Programming Course", files: "3", modules: "3", fns: "24", types: "82", java: "5", time: "12ms" },
-  { name: "COBOL Unit Test", files: "153", modules: "2", fns: "2", types: "44", java: "4", time: "30ms" },
-  { name: "COBOL is Fun", files: "51", modules: "2", fns: "3", types: "78", java: "4", time: "4ms" },
+  { name: "AWS CardDemo", files: "61", modules: "29", fns: "546", types: "2,032", generated: "60", time: "318ms" },
+  { name: "CobolCraft", files: "311", modules: "206", fns: "423", types: "1,363", generated: "270", time: "462ms" },
+  { name: "COBOL Library", files: "126", modules: "28", fns: "54", types: "226", generated: "30", time: "17ms" },
+  { name: "COBOL Check", files: "413", modules: "2", fns: "12", types: "21", generated: "7", time: "20ms" },
+  { name: "Programming Course", files: "3", modules: "3", fns: "24", types: "82", generated: "5", time: "12ms" },
+  { name: "COBOL Unit Test", files: "153", modules: "2", fns: "2", types: "44", generated: "4", time: "30ms" },
+  { name: "COBOL is Fun", files: "51", modules: "2", fns: "3", types: "78", generated: "4", time: "4ms" },
 ];
 
 const cols = [
@@ -19,7 +19,7 @@ const cols = [
   { key: "modules", label: "Modules", w: "w-[70px]" },
   { key: "fns", label: "Functions", w: "w-[80px]" },
   { key: "types", label: "Data Types", w: "w-[90px]" },
-  { key: "java", label: "Java Files", w: "w-[80px]" },
+  { key: "generated", label: "Generated", w: "w-[80px]" },
   { key: "time", label: "Time", w: "w-[70px]" },
 ] as const;
 
@@ -63,7 +63,7 @@ export default function BenchmarkResults() {
               <span className="w-[70px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.modules}</span>
               <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.fns}</span>
               <span className="w-[90px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.types}</span>
-              <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.java}</span>
+              <span className="w-[80px] font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>{r.generated}</span>
               <span className="w-[70px] font-mono text-[11px] font-medium text-[var(--color-table-green)]">{r.time}</span>
             </div>
           ))}
@@ -71,7 +71,7 @@ export default function BenchmarkResults() {
       </motion.div>
 
       <p className="font-mono text-xs md:text-sm font-semibold text-center" style={{ color: "var(--color-text)" }}>
-        1,118 files &rarr; 380 Java classes in under 1 second. Zero API calls. Zero cloud dependencies.
+        1,118 files &rarr; 380 generated artifacts in under 1 second. Zero cloud required.
       </p>
     </section>
   );

@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Anvil — Forge legacy into modern code",
   description:
-    "Open-source multi-agent platform that reads your COBOL, understands the business logic, and writes production-grade Java Spring Boot.",
+    "Open-source multi-agent platform that reads legacy code (COBOL/Perl/Fortran), extracts business logic, and generates modern TypeScript, Python, or Go — with on‑prem/VPC workflows and regression gates.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

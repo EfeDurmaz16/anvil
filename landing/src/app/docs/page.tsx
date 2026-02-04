@@ -47,12 +47,12 @@ const pages: Record<string, React.ReactNode> = {
   installation: <InstallationPage />,
   "quick-start": <QuickStartPage />,
   configuration: <ConfigurationPage />,
-  cartographer: <AgentPage agent="Cartographer" num="01" role="Parse & Map" desc="The Cartographer agent reads COBOL source files and builds a complete semantic graph — modules, functions, data types, call graphs, control flow, and I/O contracts. It uses tree-sitter for parsing and requires no LLM." details={["Parses fixed-format COBOL (columns 1-72) with Area A/B detection", "Extracts IDENTIFICATION, DATA, and PROCEDURE divisions", "Builds call graphs from PERFORM, CALL, and GO TO statements", "Maps all PIC clauses to typed IR nodes (PIC 9 → numeric, PIC X → string)", "Resolves COPY/INCLUDE copybook dependencies", "Detects EXEC CICS and EXEC SQL blocks for I/O classification", "Stores the semantic graph in Neo4j and generates vector embeddings in Qdrant"]} />,
+  cartographer: <AgentPage agent="Cartographer" num="01" role="Parse & Map" desc="The Cartographer agent reads legacy source files and builds a semantic graph — modules, functions, data types, call graphs, and I/O contracts. No LLM needed. (Tree-sitter parsing is optional and can be enabled at build time.)" details={["Parses fixed-format COBOL (columns 1-72) with Area A/B detection", "Extracts IDENTIFICATION, DATA, and PROCEDURE divisions", "Builds call graphs from PERFORM, CALL, and GO TO statements", "Maps PIC clauses to typed IR nodes (PIC 9 → numeric, PIC X → string)", "Resolves COPY/INCLUDE copybook dependencies", "Detects EXEC CICS and EXEC SQL blocks for I/O classification", "Optionally stores the semantic graph in Neo4j and generates vector embeddings in Qdrant"]} />,
   specular: <AgentPage agent="Specular" num="02" role="Extract Business Rules" desc="The Specular agent uses an LLM to analyze the semantic graph and extract business rules, validation logic, and domain patterns that aren't visible from syntax alone." details={["Queries the semantic graph for complex conditional logic", "Uses LLM to identify business rules embedded in EVALUATE/IF chains", "Extracts validation patterns (field-level, cross-field, temporal)", "Documents domain-specific terminology and naming conventions", "Scores complexity per function to prioritize review", "Enriches the IR with business rule annotations", "Works without LLM in template-only mode (rules are skipped)"]} />,
-  architect: <AgentPage agent="Architect" num="03" role="Generate Modern Code" desc="The Architect agent transforms the enriched IR into idiomatic Java Spring Boot code with proper type mapping, Spring annotations, and clean architecture patterns." details={["Maps COBOL data types to Java types (PIC 9→int/long/BigDecimal, PIC X→String)", "Generates @Service, @RestController, @Repository classes", "Creates Spring Boot project structure (controller/service/model/repository)", "Uses LLM for complex logic translation when available", "Falls back to template-based generation in offline mode", "Generates unit test stubs alongside production code", "Preserves original COBOL comments as Javadoc annotations"]} />,
-  judge: <AgentPage agent="Judge" num="04" role="Verify Equivalence" desc="The Judge agent validates that generated Java code preserves the original COBOL business semantics. If verification fails, the Architect retries automatically (up to 3 times)." details={["Compares input/output contracts between COBOL and Java", "Verifies type mapping correctness (no precision loss)", "Checks that all business rules are preserved in generated code", "Runs generated Java through compilation check", "Scores semantic equivalence on a 0-1 scale (threshold: 0.85)", "On failure, provides detailed feedback to Architect for retry", "Retry loop runs up to 3 times before reporting partial success"]} />,
+  architect: <AgentPage agent="Architect" num="03" role="Generate Modern Code" desc="The Architect agent transforms the enriched IR into your target stack (TypeScript, Python, Go, …). Target plugins emit an execution manifest so orchestration stays target-agnostic." details={["Generates idiomatic target code with deterministic scaffolding", "Emits an anvil.manifest.json (compile + runner commands)", "Uses an LLM for complex logic translation when available", "Falls back to template-based generation in offline mode", "Preserves structure and naming for traceability", "Supports adding new targets via TargetPlugin only (no extra orchestration config)", "Can generate unit-test stubs and harness runners per target"]} />,
+  judge: <AgentPage agent="Judge" num="04" role="Verify Equivalence" desc="The Judge agent validates that generated code preserves the original business semantics. It combines semantic checks with regression gates (record/replay, DB diff, compilation) and produces a proof pack." details={["Parses structured LLM verdicts when enabled (strict JSON)", "Scores equivalence with gate-based rules (compile must pass)", "Integrates with fixture replay and DB diff for behavior checks", "Produces proof packs (diffs, logs, SBOM metadata) for reviewers", "On failure, provides actionable feedback for retry", "Retry loop runs up to 3 times before reporting partial success", "Runs in fully offline mode (LLM optional)"]} />,
   "semantic-graph": <PlaceholderPage title="Semantic Graph" desc="The Semantic Graph (IR) is Anvil's central data structure. It represents the complete understanding of a COBOL codebase as a typed, queryable graph of modules, functions, data types, call edges, and I/O contracts." />,
-  "plugin-system": <PlaceholderPage title="Plugin System" desc="Anvil's plugin architecture allows adding new source languages and target platforms. Implement the SourcePlugin or TargetPlugin interface to extend Anvil beyond COBOL → Java." />,
+  "plugin-system": <PlaceholderPage title="Plugin System" desc="Anvil's plugin architecture allows adding new source languages and target platforms. Implement SourcePlugin/TargetPlugin to extend Anvil beyond COBOL → TypeScript/Python/Go (or any other target) without changing orchestration." />,
   "llm-providers": <PlaceholderPage title="LLM Providers" desc="Anvil supports multiple LLM providers through a unified interface: Anthropic (Claude), OpenAI (GPT-4), Groq, Ollama, and vLLM. Configure your provider in anvil.yaml or run fully offline with template-only mode." />,
   "cli-reference": <CLIReferencePage />,
   "config-file": <PlaceholderPage title="Config File" desc="Anvil is configured via anvil.yaml. All settings have sensible defaults — you can run Anvil with zero configuration for offline template-based generation." />,
@@ -192,12 +192,12 @@ function IntroductionPage() {
     <>
       <h1 className="text-[32px] font-bold" style={{ color: "var(--color-text)" }}>Introduction</h1>
       <p className="font-mono text-sm leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
-        Anvil is an open-source, multi-agent platform that modernizes legacy COBOL codebases into production-grade Java Spring Boot applications. It uses a pipeline of four specialized AI agents — Cartographer, Specular, Architect, and Judge — to parse, understand, transform, and verify your code.
+        Anvil is an open-source, multi-agent platform that modernizes legacy codebases into production-ready TypeScript, Python, or Go. It uses a pipeline of four specialized agents — Cartographer, Specular, Architect, and Judge — to parse, understand, transform, and verify your code.
       </p>
 
       <h2 className="text-xl font-semibold mt-4" style={{ color: "var(--color-text)" }}>What is Anvil?</h2>
       <p className="font-mono text-sm leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
-        Legacy mainframe systems running COBOL still power critical infrastructure in banking, insurance, healthcare, and government. These systems are reliable but increasingly difficult to maintain as the workforce that built them retires. Anvil bridges this gap by automatically translating COBOL into modern, idiomatic Java while preserving the original business logic.
+        Legacy mainframe systems (COBOL) and legacy server code (Perl/Fortran) still power critical infrastructure in banking and telecom. These systems are reliable but hard to evolve. Anvil bridges this gap by translating legacy logic into modern services and validating behavior with regression gates and proof packs.
       </p>
 
       {/* Alert */}
@@ -217,7 +217,7 @@ function IntroductionPage() {
           { icon: Bot, title: "Multi-Agent Pipeline", desc: "Four specialized agents (Cartographer, Specular, Architect, Judge) each handle one step of the modernization process. The pipeline runs sequentially with an automatic retry loop between Architect and Judge." },
           { icon: Puzzle, title: "Pluggable LLM Interface", desc: "Works with Anthropic Claude, OpenAI GPT-4, Groq, Ollama, vLLM, or no LLM at all. Switch providers with a single config change." },
           { icon: Workflow, title: "Production-Grade Orchestration", desc: "Built on Temporal.io for reliable workflow execution with retry logic, observability, and distributed processing. Not a script — a production system." },
-          { icon: Zap, title: "Extensible Plugin System", desc: "COBOL → Java today. The plugin interface supports any source and target language. Add RPG, PL/I, Fortran, or any language by implementing the SourcePlugin/TargetPlugin interfaces." },
+          { icon: Zap, title: "Extensible Plugin System", desc: "Multi-source → multi-target. Generate TypeScript, Python, Go (and more) by implementing SourcePlugin/TargetPlugin — orchestration stays the same." },
         ].map(({ icon: Icon, title, desc }) => (
           <div key={title} className="flex gap-3 p-4" style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-card-bg)" }}>
             <Icon size={18} className="text-[var(--color-accent)] shrink-0 mt-0.5" />
@@ -233,9 +233,9 @@ function IntroductionPage() {
       <div className="p-4 mt-2" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
         <pre className="font-mono text-[13px] leading-[1.7]" style={{ color: "var(--color-code-green)" }}>
 {`$ go install github.com/efebarandurmaz/anvil/cmd/anvil@latest
-$ anvil run --source cobol --target java \\
+$ anvil run --source cobol --target typescript \\
     --input ./your-cobol-src \\
-    --output ./generated-java`}
+    --output ./generated`}
         </pre>
       </div>
     </>
@@ -247,7 +247,7 @@ function InstallationPage() {
     <>
       <h1 className="text-[32px] font-bold" style={{ color: "var(--color-text)" }}>Installation</h1>
       <p className="font-mono text-sm leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
-        Anvil requires Go 1.21 or later. It has zero external runtime dependencies for basic operation.
+        Anvil requires a recent Go toolchain (see <code className="text-[var(--color-accent)]">go.mod</code>). It has zero external runtime dependencies for basic operation.
       </p>
 
       <h2 className="text-xl font-semibold mt-4" style={{ color: "var(--color-text)" }}>Using Go Install</h2>
@@ -305,18 +305,18 @@ function QuickStartPage() {
       <h2 className="text-xl font-semibold mt-6" style={{ color: "var(--color-text)" }}>2. Run on Your COBOL</h2>
       <div className="p-4 mt-2" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
         <pre className="font-mono text-[13px] leading-[1.7]" style={{ color: "var(--color-code-green)" }}>
-{`$ anvil run --source cobol --target java \\
+{`$ anvil run --source cobol --target typescript \\
     --input ./your-cobol-src \\
-    --output ./generated-java`}
+    --output ./generated`}
         </pre>
       </div>
 
       <h2 className="text-xl font-semibold mt-6" style={{ color: "var(--color-text)" }}>3. View Results</h2>
       <div className="p-4 mt-2" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
         <pre className="font-mono text-[13px] leading-[1.7]" style={{ color: "var(--color-code-green)" }}>
-{`$ anvil run --source cobol --target java \\
+{`$ anvil run --source cobol --target typescript \\
     --input ./your-cobol-src \\
-    --output ./generated-java \\
+    --output ./generated \\
     --json | jq .`}
         </pre>
       </div>
@@ -328,9 +328,10 @@ function QuickStartPage() {
       <div className="p-4 mt-2" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
         <pre className="font-mono text-[13px] leading-[1.7]" style={{ color: "var(--color-accent)" }}>
 {`llm:
-  provider: anthropic
-  api_key: \${ANTHROPIC_API_KEY}
-  model: claude-sonnet-4-20250514`}
+  provider: ollama
+  base_url: http://localhost:11434/v1
+  model: codellama
+  api_key: ""`}
         </pre>
       </div>
     </>
@@ -350,39 +351,44 @@ function ConfigurationPage() {
         <pre className="font-mono text-[13px] leading-[1.7]" style={{ color: "var(--color-accent)" }}>
 {`# anvil.yaml
 llm:
-  provider: anthropic       # anthropic | openai | groq | ollama
-  api_key: \${ANTHROPIC_API_KEY}
-  model: claude-sonnet-4-20250514
-  temperature: 0.1
+  # provider: anthropic, openai, groq, huggingface, ollama, together, deepseek, custom, none
+  provider: none
+  model: ""
+  api_key: ""
+  base_url: ""
+  temperature: 0.2
   max_tokens: 4096
 
-source:
-  language: cobol
-  encoding: utf-8
+graph:
+  uri: bolt://localhost:7687
+  username: neo4j
+  password: \${NEO4J_PASSWORD}
 
-target:
-  language: java
-  framework: spring-boot
-  java_version: 17
-
-pipeline:
-  max_retries: 3            # Architect-Judge retry limit
-  quality_threshold: 0.85   # Judge pass threshold (0-1)
-
-storage:
-  neo4j:
-    uri: bolt://localhost:7687
-    username: neo4j
-    password: \${NEO4J_PASSWORD}
-  qdrant:
-    host: localhost
-    port: 6334
+vector:
+  host: localhost
+  port: 6334
+  collection: anvil
 
 temporal:
   host: localhost:7233
-  namespace: anvil
-  task_queue: modernization`}
+  namespace: default
+  task_queue: anvil-tasks
+
+log:
+  level: info
+  format: json`}
         </pre>
+      </div>
+
+      <div className="flex gap-3 p-4 mt-4" style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)" }}>
+        <AlertTriangle size={18} className="text-[var(--color-accent)] shrink-0 mt-0.5" />
+        <div className="flex flex-col gap-1">
+          <span className="font-mono text-[12px] font-semibold" style={{ color: "var(--color-text)" }}>Target selection</span>
+          <span className="font-mono text-[12px] leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
+            Target language is selected via CLI/workflow input (<span className="text-[var(--color-accent)]">--target typescript|python|golang</span>).
+            Target plugins emit an execution manifest so the harness/orchestrator stays target-agnostic.
+          </span>
+        </div>
       </div>
     </>
   );

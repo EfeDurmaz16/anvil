@@ -18,28 +18,17 @@ const cobol = `       IDENTIFICATION DIVISION.
               GIVING WS-RESULT.
            DISPLAY "SUM: " WS-RESULT.`;
 
-const java = `@Service
-public class Calculator {
-    private int wsNum1 = 0;
-    private int wsNum2 = 0;
-    private long wsResult = 0L;
-
-    public void mainParagraph() {
-        addNumbers();
-    }
-
-    private void addNumbers() {
-        wsResult = wsNum1 + wsNum2;
-        System.out.println(
-            "SUM: " + wsResult);
-    }
+const typescript = `// Target: TypeScript (example)
+export function addNumbers(wsNum1 = 0, wsNum2 = 0) {
+  const wsResult = wsNum1 + wsNum2;
+  return { wsResult, display: "SUM: " + wsResult };
 }`;
 
 const mappings = [
-  { from: "PIC 9(5)", to: "int" },
-  { from: "PIC 9(10)", to: "long" },
-  { from: "PERFORM", to: "method()" },
-  { from: "WORKING-STORAGE", to: "private fields" },
+  { from: "PIC 9(5)", to: "number" },
+  { from: "PIC 9(10)", to: "number" },
+  { from: "PERFORM", to: "function()" },
+  { from: "WORKING-STORAGE", to: "module state" },
 ];
 
 export default function CodeComparison() {
@@ -59,14 +48,14 @@ export default function CodeComparison() {
           <pre className="font-mono text-[10px] md:text-xs text-[var(--color-text-secondary)] leading-[1.7] whitespace-pre overflow-x-auto">{cobol}</pre>
         </div>
 
-        {/* Java */}
+        {/* TypeScript */}
         <div className="flex-1 border md:border-l-0 border-[var(--color-border)] bg-[var(--color-bg)] p-4 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded bg-[var(--color-green)]" />
-            <span className="font-mono text-[10px] font-semibold tracking-[1px] text-[var(--color-green)]">JAVA SPRING BOOT</span>
+            <span className="font-mono text-[10px] font-semibold tracking-[1px] text-[var(--color-green)]">TYPESCRIPT</span>
           </div>
           <div className="h-px bg-[var(--color-border)]" />
-          <pre className="font-mono text-[10px] md:text-xs text-[var(--color-green)] leading-[1.7] whitespace-pre overflow-x-auto">{java}</pre>
+          <pre className="font-mono text-[10px] md:text-xs text-[var(--color-green)] leading-[1.7] whitespace-pre overflow-x-auto">{typescript}</pre>
         </div>
       </div>
 

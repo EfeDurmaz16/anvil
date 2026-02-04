@@ -58,7 +58,7 @@ public class Calc {
       { agent: "Cartographer", msg: "Resolving data divisions..." },
       { agent: "Specular", msg: "Extracting business logic..." },
       { agent: "Specular", msg: "Mapping COMPUTE → arithmetic ops..." },
-      { agent: "Architect", msg: "Selecting Java Spring Boot target..." },
+      { agent: "Architect", msg: "Selecting target (demo: Java)..." },
       { agent: "Architect", msg: "Generating service class..." },
       { agent: "Architect", msg: "Mapping PIC 9(n)V99 → BigDecimal..." },
       { agent: "Judge", msg: "Verifying semantic equivalence..." },
@@ -417,7 +417,7 @@ public class CustomerController {
 #  File I/O:     532
 #  EXEC SQL:     184
 #  EXEC CICS:    267`,
-    modern: `✓ Generated 60 Java Spring Boot files
+    modern: `✓ Generated 60 target files (demo: Java)
 
   src/main/java/
   ├── controller/       12 REST controllers
@@ -461,7 +461,7 @@ public class CustomerController {
     ],
   },
 
-  /* ── 6. Perl → Java ── */
+  /* ── 6. Perl → Modern Target (demo: Java) ── */
   {
     label: "Perl (Bugzilla)",
     legacyFile: "Bugzilla.pm",
@@ -572,7 +572,7 @@ public class BugzillaService {
     ],
   },
 
-  /* ── 7. Fortran → Java ── */
+  /* ── 7. Fortran → Modern Target (demo: Java) ── */
   {
     label: "Fortran (Scientific)",
     legacyFile: "linalg.f90",
@@ -785,10 +785,10 @@ export default function DemoPage() {
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
             <div>
               <h1 className="text-xl md:text-2xl font-bold" style={{ color: "var(--color-text)" }}>
-                Legacy → Java Migration
+                Legacy → Modern Migration
               </h1>
               <p className="font-mono text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
-                Watch Anvil transform COBOL, Perl, or Fortran in real-time
+                Watch Anvil transform COBOL, Perl, or Fortran in real-time. (This demo shows a Java target for illustration; production targets TypeScript, Python, and Go via plugins.)
               </p>
             </div>
 

@@ -7,8 +7,8 @@ import SectionLabel from "./SectionLabel";
 const agents = [
   { num: "01", name: "Cartographer", role: "Parse & Map", desc: "Reads COBOL source, builds a semantic graph of modules, functions, data types, call graphs, and I/O contracts. No LLM needed." },
   { num: "02", name: "Specular", role: "Extract Business Rules", desc: "AI agent analyzes the semantic graph to identify and document business rules, validation logic, and domain patterns." },
-  { num: "03", name: "Architect", role: "Generate Modern Code", desc: "Transforms the enriched IR into idiomatic Java Spring Boot with proper type mapping, Spring annotations, and clean architecture." },
-  { num: "04", name: "Judge", role: "Verify Equivalence", desc: "Validates that generated code preserves the original business semantics. Failed? Architect retries automatically (up to 3x).", highlight: true },
+  { num: "03", name: "Architect", role: "Generate Modern Code", desc: "Transforms the enriched IR into your target stack (TypeScript, Python, Go, …). Target plugins emit a deterministic build/run manifest so orchestration stays target-agnostic." },
+  { num: "04", name: "Judge", role: "Verify Equivalence", desc: "Validates behavior with regression gates (record/replay, DB diff, compilation) and produces a proof pack you can hand to enterprise reviewers. Failed? Architect retries automatically.", highlight: true },
 ];
 
 export default function HowItWorks() {

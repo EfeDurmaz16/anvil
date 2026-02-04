@@ -8,7 +8,7 @@ const pipelineStages = [
   { agent: "Cartographer", action: "Parsing source files..." },
   { agent: "Cartographer", action: "Building semantic graph..." },
   { agent: "Specular", action: "Extracting business rules..." },
-  { agent: "Architect", action: "Generating Java Spring Boot..." },
+  { agent: "Architect", action: "Generating target code..." },
   { agent: "Judge", action: "Verifying semantic equivalence..." },
 ];
 
@@ -31,20 +31,10 @@ const tabs = [
            ADD WS-NUM1 TO WS-NUM2
               GIVING WS-RESULT.
            DISPLAY "SUM: " WS-RESULT.`,
-    output: `@Service
-public class Calculator {
-    private int wsNum1 = 0;
-    private int wsNum2 = 0;
-    private long wsResult = 0L;
-
-    public void mainParagraph() {
-        addNumbers();
-    }
-
-    private void addNumbers() {
-        wsResult = wsNum1 + wsNum2;
-        System.out.println("SUM: " + wsResult);
-    }
+    output: `// Target: TypeScript (example)
+export function addNumbers(wsNum1 = 0, wsNum2 = 0) {
+  const wsResult = wsNum1 + wsNum2;
+  return { wsResult, display: "SUM: " + wsResult };
 }`,
     metrics: [
       { value: "1", label: "module" },
@@ -89,26 +79,21 @@ sub update_status {
 }
 
 1;`,
-    output: `@Service
-public class BugReportService {
+    output: `// Target: TypeScript (example)
+export class BugReportService {
+  constructor(
+    private db: { query: (sql: string, args: unknown[]) => Promise<any> },
+    private audit: { log: (line: string) => void },
+  ) {}
 
-    private final BugRepository bugRepo;
-    private final AuditLogger auditLogger;
+  async fetchBug(id: number) {
+    const rows = await this.db.query("SELECT * FROM bugs WHERE id = ?", [id]);
+    return rows?.[0] ?? null;
+  }
 
-    public BugReportService(BugRepository repo,
-            AuditLogger logger) {
-        this.bugRepo = repo;
-        this.auditLogger = logger;
-    }
-
-    public Optional<Bug> fetchBug(Long id) {
-        return bugRepo.findById(id);
-    }
-
-    public void updateStatus(Long id, String status) {
-        auditLogger.log(
-            "Bug " + id + ": " + status);
-    }
+  updateStatus(id: number, status: string) {
+    this.audit.log(\`Bug \${id}: \${status}\`);
+  }
 }`,
     metrics: [
       { value: "1", label: "module" },
@@ -149,28 +134,19 @@ contains
   end function determinant
 
 end module matrix_operations`,
-    output: `@Service
-public class MatrixOperations {
-
-    private static final int MAX_SIZE = 100;
-
-    public double[][] multiply(
-            double[][] a, double[][] b, int n) {
-        double[][] c = new double[n][n];
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < n; j++) {
-                c[i][j] = 0.0;
-                for (int k = 0; k < n; k++) {
-                    c[i][j] += a[i][k] * b[k][j];
-                }
-            }
-        }
-        return c;
+    output: `// Target: TypeScript (example)
+export function multiply(a: number[][], b: number[][], n: number) {
+  const c: number[][] = Array.from({ length: n }, () => Array(n).fill(0));
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) {
+      for (let k = 0; k < n; k++) c[i][j] += a[i][k] * b[k][j];
     }
+  }
+  return c;
+}
 
-    public double determinant(double[][] m, int n) {
-        return m[0][0]*m[1][1] - m[0][1]*m[1][0];
-    }
+export function determinant2x2(m: number[][]) {
+  return m[0][0] * m[1][1] - m[0][1] * m[1][0];
 }`,
     metrics: [
       { value: "1", label: "module" },
@@ -193,23 +169,19 @@ public class MatrixOperations {
   Data Types:  2,032
   Call Edges:  708
   I/O:         532
-  Java Files:  60
+  Generated:   60
   Time:        318ms`,
-    output: `✓ Generated 60 Java Spring Boot files
+    output: `✓ Generated 60 target files
 
-  src/main/java/
-  ├── controller/     12 files
-  ├── service/        18 files
-  ├── model/          15 files
-  ├── repository/      8 files
-  └── config/          7 files
+  src/
+  ├── api/            12 handlers
+  ├── domain/         18 services
+  ├── model/          15 data models
+  ├── persistence/     8 repositories
+  └── config/          7 runtime configs
 
-  src/test/java/
-  └── service/        18 test files
-
-  All 546 functions mapped.
-  All 2,032 data types converted.
-  Judge verification: PASS (score: 0.97)`,
+  Regression gate: PASS (fixtures + DB diff)
+  Proof pack: ./proof-pack/summary.json`,
     metrics: [
       { value: "61", label: "files" },
       { value: "546", label: "functions" },
