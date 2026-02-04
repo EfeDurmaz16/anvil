@@ -41,12 +41,41 @@ func main() {
 	registry.RegisterTarget(goplugin.New())
 	registry.RegisterTarget(tsplugin.New())
 
-	var provider llm.Provider
-	switch cfg.LLM.Provider {
-	case "openai":
-		provider = openai.New(cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.BaseURL, "")
-	default:
-		provider = anthropic.New(cfg.LLM.APIKey, cfg.LLM.Model, cfg.LLM.BaseURL)
+	// Build LLM provider via factory (supports on-prem/no-LLM operation).
+	factory := llm.NewFactory()
+	factory.Register("anthropic", func(c llm.ProviderConfig) (llm.Provider, error) {
+		return anthropic.New(c.APIKey, c.Model, c.BaseURL), nil
+	})
+	factory.Register("openai", func(c llm.ProviderConfig) (llm.Provider, error) {
+		return openai.New(c.APIKey, c.Model, c.BaseURL, c.EmbedModel), nil
+	})
+	// All OpenAI-compatible providers
+	for _, p := range []struct{ name, url string }{
+		{"groq", llm.KnownProviders["groq"]},
+		{"huggingface", llm.KnownProviders["huggingface"]},
+		{"ollama", llm.KnownProviders["ollama"]},
+		{"together", llm.KnownProviders["together"]},
+		{"deepseek", llm.KnownProviders["deepseek"]},
+		{"custom", ""},
+	} {
+		p := p
+		factory.Register(p.name, func(c llm.ProviderConfig) (llm.Provider, error) {
+			base := c.BaseURL
+			if base == "" {
+				base = p.url
+			}
+			return openai.New(c.APIKey, c.Model, base, c.EmbedModel), nil
+		})
+	}
+
+	provider, err := factory.Create(llm.ProviderConfig{
+		Provider: cfg.LLM.Provider,
+		APIKey:   cfg.LLM.APIKey,
+		Model:    cfg.LLM.Model,
+		BaseURL:  cfg.LLM.BaseURL,
+	})
+	if err != nil {
+		log.Fatalf("creating LLM provider: %v", err)
 	}
 
 	temporalmod.SetDependencies(&temporalmod.Dependencies{

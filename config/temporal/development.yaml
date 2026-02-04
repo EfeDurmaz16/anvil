@@ -1,0 +1,31 @@
+# Temporal Dynamic Configuration for Development
+# See: https://docs.temporal.io/references/dynamic-configuration
+
+# Increase workflow execution timeout for long-running modernization jobs
+limit.maxWorkflowExecutionTimeoutMinutes:
+  - value: 1440  # 24 hours
+    constraints: {}
+
+# History size limits
+limit.historyCount:
+  - value: 100000
+    constraints: {}
+
+limit.historySize:
+  - value: 104857600  # 100MB
+    constraints: {}
+
+# Enable search attributes
+frontend.enableReadFromSecondaryVisibility:
+  - value: true
+    constraints: {}
+
+# Worker settings
+worker.enableConnector:
+  - value: true
+    constraints: {}
+
+# Development-friendly settings
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}

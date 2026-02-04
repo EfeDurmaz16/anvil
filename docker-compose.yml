@@ -1,0 +1,128 @@
+# Anvil Development Environment
+# Usage: docker-compose up -d
+#
+# Services:
+#   - temporal: Workflow orchestration
+#   - temporal-ui: Web UI for Temporal (http://localhost:8080)
+#   - postgres: Database for testing harness DB diff
+#   - anvil: Main application (build with docker-compose build anvil)
+
+version: "3.8"
+
+services:
+  # PostgreSQL for testing harness DB diff functionality
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: anvil
+      POSTGRES_PASSWORD: anvil_dev
+      POSTGRES_DB: anvil_test
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U anvil -d anvil_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Temporal server for workflow orchestration
+  temporal:
+    image: temporalio/auto-setup:1.24
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=anvil
+      - POSTGRES_PWD=anvil_dev
+      - POSTGRES_SEEDS=postgres
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/config/dynamicconfig/development.yaml
+    ports:
+      - "7233:7233"  # gRPC
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./config/temporal:/etc/temporal/config/dynamicconfig:ro
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      - temporal
+
+  # Anvil application
+  anvil:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      # Anvil config is loaded from configs/anvil.yaml; env vars override via Viper.
+      - ANVIL_LLM_PROVIDER=${ANVIL_LLM_PROVIDER:-none}
+      - ANVIL_LLM_API_KEY=${ANVIL_LLM_API_KEY:-}
+      - ANVIL_LLM_MODEL=${ANVIL_LLM_MODEL:-}
+      - ANVIL_LLM_BASE_URL=${ANVIL_LLM_BASE_URL:-}
+      - ANVIL_TEMPORAL_HOST=temporal:7233
+      - ANVIL_TEMPORAL_NAMESPACE=${ANVIL_TEMPORAL_NAMESPACE:-default}
+      - ANVIL_TEMPORAL_TASK_QUEUE=${ANVIL_TEMPORAL_TASK_QUEUE:-anvil-tasks}
+      - ANVIL_LOG_LEVEL=${ANVIL_LOG_LEVEL:-info}
+      - ANVIL_LOG_FORMAT=${ANVIL_LOG_FORMAT:-json}
+    volumes:
+      - ./testdata:/app/testdata:ro
+      - ./output:/app/output
+    depends_on:
+      - temporal
+      - postgres
+    profiles:
+      - full  # Only start with: docker-compose --profile full up
+
+  # Temporal worker (runs orchestration + harness gates)
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["anvil-worker", "configs/anvil.yaml"]
+    environment:
+      - ANVIL_LLM_PROVIDER=${ANVIL_LLM_PROVIDER:-none}
+      - ANVIL_LLM_API_KEY=${ANVIL_LLM_API_KEY:-}
+      - ANVIL_LLM_MODEL=${ANVIL_LLM_MODEL:-}
+      - ANVIL_LLM_BASE_URL=${ANVIL_LLM_BASE_URL:-}
+      - ANVIL_TEMPORAL_HOST=temporal:7233
+      - ANVIL_TEMPORAL_NAMESPACE=${ANVIL_TEMPORAL_NAMESPACE:-default}
+      - ANVIL_TEMPORAL_TASK_QUEUE=${ANVIL_TEMPORAL_TASK_QUEUE:-anvil-tasks}
+      - ANVIL_LOG_LEVEL=${ANVIL_LOG_LEVEL:-info}
+      - ANVIL_LOG_FORMAT=${ANVIL_LOG_FORMAT:-json}
+    depends_on:
+      - temporal
+    profiles:
+      - full
+
+  # Optional: Local LLM server placeholder (Ollama)
+  # Uncomment to use local LLM
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+
+volumes:
+  postgres_data:
+  # ollama_data:
+
+networks:
+  default:
+    name: anvil-network
