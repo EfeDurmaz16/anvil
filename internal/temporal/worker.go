@@ -16,6 +16,7 @@ func StartWorker(c client.Client, taskQueue string) (worker.Worker, error) {
 	w.RegisterActivity(SpecularActivity)
 	w.RegisterActivity(ArchitectActivity)
 	w.RegisterActivity(JudgeActivity)
+	w.RegisterActivity(HarnessActivity)
 
 	if err := w.Start(); err != nil {
 		return nil, fmt.Errorf("starting worker: %w", err)
