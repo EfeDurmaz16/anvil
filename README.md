@@ -151,13 +151,31 @@ temporal:
 make test
 ```
 
+### Harness (Record/Replay)
+
+To validate behavioral equivalence using recorded fixtures:
+
+```bash
+./anvil harness run \
+  --fixtures fixtures.jsonl \
+  --code /path/to/generated-project \
+  --output /tmp/anvil-proof
+```
+
+The generated project must include `anvil.manifest.json` describing how to compile and run fixtures.
+
 ## Supported Languages
 
 | Source | Target | Status |
 |--------|--------|--------|
 | COBOL  | Java Spring Boot | ✅ MVP |
+| COBOL  | Go | 🧪 Alpha |
+| COBOL  | Python | 🧪 Alpha |
+| COBOL  | TypeScript | 🧪 Alpha |
 | PL/I   | Java / Kotlin    | Planned |
 | RPG    | Python / Java    | Planned |
+
+> Note: Go/Python/TypeScript targets are currently scaffold + stubs (template-first). The long-term goal is IR-driven, testable equivalence.
 
 ## LLM Providers
 
