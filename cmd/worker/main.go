@@ -14,7 +14,10 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/llm/openai"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 	cobolplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/cobol"
+	goplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/golang"
 	javaplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/java"
+	pythonplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/python"
+	tsplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/typescript"
 	temporalmod "github.com/efebarandurmaz/anvil/internal/temporal"
 
 	temporalclient "go.temporal.io/sdk/client"
@@ -34,6 +37,9 @@ func main() {
 	registry := plugins.NewRegistry()
 	registry.RegisterSource(cobolplugin.New())
 	registry.RegisterTarget(javaplugin.New())
+	registry.RegisterTarget(pythonplugin.New())
+	registry.RegisterTarget(goplugin.New())
+	registry.RegisterTarget(tsplugin.New())
 
 	var provider llm.Provider
 	switch cfg.LLM.Provider {

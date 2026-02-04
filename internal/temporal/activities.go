@@ -150,7 +150,9 @@ func JudgeActivity(ctx context.Context, input ModernizationInput, graphJSON, fil
 		Graph: &graph,
 		LLM:   deps.LLM.LLM,
 		Params: map[string]string{
-			"generated_code": filesJSON,
+			"source":          input.SourceLang,
+			"target":          input.TargetLang,
+			"generated_files": filesJSON,
 		},
 	}
 

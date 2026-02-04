@@ -18,6 +18,10 @@ func New() *Plugin { return &Plugin{} }
 
 func (p *Plugin) Language() string { return "fortran" }
 
+func (p *Plugin) FileExtensions() []string {
+	return []string{".f", ".for", ".f77", ".f90", ".f95", ".f03", ".f08"}
+}
+
 func (p *Plugin) Parse(ctx context.Context, files []plugins.SourceFile) (*ir.SemanticGraph, error) {
 	graph := &ir.SemanticGraph{
 		CallGraph: &ir.CallGraph{},
@@ -84,13 +88,13 @@ var (
 	usePattern = regexp.MustCompile(`(?i)^\s*use\s+([\w_]+)`)
 
 	// Variable declarations
-	integerDeclPattern = regexp.MustCompile(`(?i)^\s*integer(?:\s*\*\s*(\d+)|\s*\(kind\s*=\s*(\d+)\))?(?:\s*,\s*(?:intent\s*\(\s*(in|out|inout)\s*\)|dimension\s*\([^)]*\)|parameter|allocatable|save|target|pointer))*\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
-	realDeclPattern    = regexp.MustCompile(`(?i)^\s*real(?:\s*\*\s*(\d+)|\s*\(kind\s*=\s*(\d+)\))?(?:\s*,\s*(?:intent\s*\(\s*(in|out|inout)\s*\)|dimension\s*\([^)]*\)|parameter|allocatable|save|target|pointer))*\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
-	doubleDeclPattern  = regexp.MustCompile(`(?i)^\s*double\s+precision(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
-	complexDeclPattern = regexp.MustCompile(`(?i)^\s*complex(?:\s*\*\s*(\d+))?(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
-	logicalDeclPattern = regexp.MustCompile(`(?i)^\s*logical(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
+	integerDeclPattern   = regexp.MustCompile(`(?i)^\s*integer(?:\s*\*\s*(\d+)|\s*\(kind\s*=\s*(\d+)\))?(?:\s*,\s*(?:intent\s*\(\s*(in|out|inout)\s*\)|dimension\s*\([^)]*\)|parameter|allocatable|save|target|pointer))*\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
+	realDeclPattern      = regexp.MustCompile(`(?i)^\s*real(?:\s*\*\s*(\d+)|\s*\(kind\s*=\s*(\d+)\))?(?:\s*,\s*(?:intent\s*\(\s*(in|out|inout)\s*\)|dimension\s*\([^)]*\)|parameter|allocatable|save|target|pointer))*\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
+	doubleDeclPattern    = regexp.MustCompile(`(?i)^\s*double\s+precision(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
+	complexDeclPattern   = regexp.MustCompile(`(?i)^\s*complex(?:\s*\*\s*(\d+))?(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
+	logicalDeclPattern   = regexp.MustCompile(`(?i)^\s*logical(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
 	characterDeclPattern = regexp.MustCompile(`(?i)^\s*character(?:\s*\*\s*(\d+)|\s*\((?:len\s*=\s*)?(\d+|\*)\))?(?:\s*,\s*(?:intent\s*\(\s*(in|out|inout)\s*\)|dimension\s*\([^)]*\)|parameter|allocatable|save|target|pointer))*\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
-	typeDeclPattern    = regexp.MustCompile(`(?i)^\s*type\s*\(\s*([\w_]+)\s*\)(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
+	typeDeclPattern      = regexp.MustCompile(`(?i)^\s*type\s*\(\s*([\w_]+)\s*\)(?:\s*,\s*intent\s*\(\s*(in|out|inout)\s*\))?\s*::\s*([\w_]+(?:\s*,\s*[\w_]+)*)`)
 
 	// Array dimension pattern
 	dimensionPattern = regexp.MustCompile(`(?i),\s*dimension\s*\((.*?)\)`)
@@ -106,7 +110,7 @@ var (
 
 	// Comment pattern: ! anywhere means rest-of-line comment in free form.
 	// Fixed-form: C/c/* in column 1 only (checked separately with original line).
-	freeFormCommentPattern = regexp.MustCompile(`^\s*!`)
+	freeFormCommentPattern  = regexp.MustCompile(`^\s*!`)
 	fixedFormCommentPattern = regexp.MustCompile(`^[Cc*]`)
 )
 
@@ -122,10 +126,10 @@ func parseFile(f plugins.SourceFile) *ir.Module {
 	}
 
 	parseContext := &parseState{
-		module:       mod,
-		lines:        lines,
-		currentLine:  0,
-		usedModules:  []string{},
+		module:      mod,
+		lines:       lines,
+		currentLine: 0,
+		usedModules: []string{},
 	}
 
 	parseProgram(parseContext)
@@ -138,12 +142,12 @@ func parseFile(f plugins.SourceFile) *ir.Module {
 }
 
 type parseState struct {
-	module         *ir.Module
-	lines          []string
-	currentLine    int
-	currentFunc    *ir.Function
-	usedModules    []string
-	inContains     bool
+	module      *ir.Module
+	lines       []string
+	currentLine int
+	currentFunc *ir.Function
+	usedModules []string
+	inContains  bool
 }
 
 // isComment checks if a line is a Fortran comment.

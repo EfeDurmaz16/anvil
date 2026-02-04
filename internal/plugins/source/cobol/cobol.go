@@ -16,6 +16,8 @@ func New() *Plugin { return &Plugin{} }
 
 func (p *Plugin) Language() string { return "cobol" }
 
+func (p *Plugin) FileExtensions() []string { return []string{".cbl", ".cob", ".cpy"} }
+
 func (p *Plugin) Parse(ctx context.Context, files []plugins.SourceFile) (*ir.SemanticGraph, error) {
 	graph := &ir.SemanticGraph{
 		CallGraph: &ir.CallGraph{},

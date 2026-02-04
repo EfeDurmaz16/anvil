@@ -2,10 +2,11 @@ package vector
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/efebarandurmaz/anvil/internal/llm"
-	"github.com/google/uuid"
 )
 
 // Embedder wraps an LLM provider to produce and store embeddings.
@@ -36,11 +37,31 @@ func (e *Embedder) IndexTexts(ctx context.Context, texts []string, metadata []ma
 			meta = metadata[i]
 		}
 		docs[i] = Document{
-			ID:       uuid.New().String(),
+			ID:       newUUID(),
 			Content:  texts[i],
 			Vector:   vectors[i],
 			Metadata: meta,
 		}
 	}
 	return e.repo.Upsert(ctx, docs)
+}
+
+func newUUID() string {
+	// Minimal UUIDv4 generator to avoid external dependencies.
+	var b [16]byte
+	_, _ = rand.Read(b[:])
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
+
+	var out [36]byte
+	hex.Encode(out[0:8], b[0:4])
+	out[8] = '-'
+	hex.Encode(out[9:13], b[4:6])
+	out[13] = '-'
+	hex.Encode(out[14:18], b[6:8])
+	out[18] = '-'
+	hex.Encode(out[19:23], b[8:10])
+	out[23] = '-'
+	hex.Encode(out[24:36], b[10:16])
+	return string(out[:])
 }

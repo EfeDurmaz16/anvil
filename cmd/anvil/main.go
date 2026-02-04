@@ -312,10 +312,15 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		fmt.Println("\n=== Judge: Verifying ===")
 		start = time.Now()
 		j := judge.New()
+		genFilesJSON, _ := json.Marshal(archResult.GeneratedFiles)
 		judgeResult, err := j.Run(ctx, &agents.AgentContext{
 			Graph:  cartResult.Graph,
 			LLM:    provider,
-			Params: map[string]string{"generated_code": ""},
+			Params: map[string]string{
+				"source":          sourceLang,
+				"target":          targetLang,
+				"generated_files": string(genFilesJSON),
+			},
 		})
 		if err != nil {
 			return fmt.Errorf("judge: %w", err)

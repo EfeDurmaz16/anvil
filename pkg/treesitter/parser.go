@@ -1,3 +1,6 @@
+//go:build cgo && treesitter
+// +build cgo,treesitter
+
 package treesitter
 
 import (

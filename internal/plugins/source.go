@@ -21,3 +21,11 @@ type SourcePlugin interface {
 	// ResolveDependencies links cross-module references within the graph.
 	ResolveDependencies(ctx context.Context, graph *ir.SemanticGraph) error
 }
+
+// FileExtensionsProvider is an optional interface for source plugins to declare
+// which file extensions they can parse (e.g. []string{".cbl",".cpy"}).
+//
+// When not implemented, the Cartographer falls back to a conservative default.
+type FileExtensionsProvider interface {
+	FileExtensions() []string
+}

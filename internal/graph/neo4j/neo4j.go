@@ -1,19 +1,20 @@
-package graph
+package neo4j
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/efebarandurmaz/anvil/internal/graph"
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
-// Neo4jRepository implements Repository using Neo4j.
+// Repository implements graph.Repository using Neo4j.
 type Neo4jRepository struct {
 	driver neo4j.DriverWithContext
 }
 
-// NewNeo4j creates a Neo4j-backed repository.
+// New creates a Neo4j-backed repository.
 func NewNeo4j(ctx context.Context, uri, username, password string) (*Neo4jRepository, error) {
 	driver, err := neo4j.NewDriverWithContext(uri, neo4j.BasicAuth(username, password, ""))
 	if err != nil {
@@ -25,11 +26,11 @@ func NewNeo4j(ctx context.Context, uri, username, password string) (*Neo4jReposi
 	return &Neo4jRepository{driver: driver}, nil
 }
 
-func (r *Neo4jRepository) StoreGraph(ctx context.Context, graph *ir.SemanticGraph) error {
+func (r *Neo4jRepository) StoreGraph(ctx context.Context, g *ir.SemanticGraph) error {
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
-	for _, mod := range graph.Modules {
+	for _, mod := range g.Modules {
 		_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
 			_, err := tx.Run(ctx,
 				"MERGE (m:Module {name: $name}) SET m.path = $path, m.language = $lang",
@@ -54,9 +55,9 @@ func (r *Neo4jRepository) StoreGraph(ctx context.Context, graph *ir.SemanticGrap
 		}
 	}
 
-	if graph.CallGraph != nil {
+	if g.CallGraph != nil {
 		_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (any, error) {
-			for _, e := range graph.CallGraph.Edges {
+			for _, e := range g.CallGraph.Edges {
 				_, err := tx.Run(ctx,
 					"MERGE (a:Function {name: $caller}) "+
 						"MERGE (b:Function {name: $callee}) "+
@@ -76,6 +77,7 @@ func (r *Neo4jRepository) StoreGraph(ctx context.Context, graph *ir.SemanticGrap
 }
 
 func (r *Neo4jRepository) LoadGraph(ctx context.Context, projectID string) (*ir.SemanticGraph, error) {
+	_ = projectID
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{})
 	defer session.Close(ctx)
 
@@ -142,3 +144,5 @@ func (r *Neo4jRepository) QueryCallees(ctx context.Context, functionName string)
 func (r *Neo4jRepository) Close(ctx context.Context) error {
 	return r.driver.Close(ctx)
 }
+
+var _ graph.Repository = (*Neo4jRepository)(nil)

@@ -1,6 +1,9 @@
 package llm
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // ProviderConfig holds all configuration needed to create any LLM provider.
 type ProviderConfig struct {
@@ -9,6 +12,20 @@ type ProviderConfig struct {
 	Model      string
 	BaseURL    string // Override for self-hosted / custom endpoints
 	EmbedModel string // Embedding model (OpenAI-compatible providers only)
+
+	// Timeout and retry configuration
+	Timeout    time.Duration // Per-request timeout (default: 2 minutes)
+	MaxRetries int           // Max retry attempts (default: 3)
+	RetryDelay time.Duration // Initial retry delay for exponential backoff (default: 1s)
+}
+
+// DefaultProviderConfig returns a config with sensible defaults.
+func DefaultProviderConfig() ProviderConfig {
+	return ProviderConfig{
+		Timeout:    2 * time.Minute,
+		MaxRetries: 3,
+		RetryDelay: 1 * time.Second,
+	}
 }
 
 // ProviderFactory creates Provider instances from config.
@@ -33,6 +50,7 @@ func (f *ProviderFactory) Register(name string, ctor ProviderConstructor) {
 
 // Create builds a Provider from config. Returns nil (no error) when provider is
 // empty or "none", allowing LLM-free operation.
+// The returned provider is automatically wrapped with retry logic if configured.
 func (f *ProviderFactory) Create(cfg ProviderConfig) (Provider, error) {
 	if cfg.Provider == "" || cfg.Provider == "none" {
 		return nil, nil
@@ -42,7 +60,18 @@ func (f *ProviderFactory) Create(cfg ProviderConfig) (Provider, error) {
 	if !ok {
 		return nil, fmt.Errorf("unknown LLM provider %q — registered: %v", cfg.Provider, f.names())
 	}
-	return ctor(cfg)
+
+	provider, err := ctor(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Wrap with retry logic if timeout or retries are configured
+	if cfg.Timeout > 0 || cfg.MaxRetries > 0 {
+		return WrapWithRetry(provider, cfg), nil
+	}
+
+	return provider, nil
 }
 
 func (f *ProviderFactory) names() []string {

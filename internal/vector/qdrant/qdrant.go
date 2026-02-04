@@ -1,22 +1,23 @@
-package vector
+package qdrant
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/efebarandurmaz/anvil/internal/vector"
 	pb "github.com/qdrant/go-client/qdrant"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-// QdrantRepository implements Repository using Qdrant.
+// Repository implements vector.Repository using Qdrant.
 type QdrantRepository struct {
 	conn       *grpc.ClientConn
 	points     pb.PointsClient
 	collection string
 }
 
-// NewQdrant creates a Qdrant-backed repository.
+// New creates a Qdrant-backed repository.
 func NewQdrant(ctx context.Context, host string, port int, collection string) (*QdrantRepository, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -30,7 +31,7 @@ func NewQdrant(ctx context.Context, host string, port int, collection string) (*
 	}, nil
 }
 
-func (r *QdrantRepository) Upsert(ctx context.Context, docs []Document) error {
+func (r *QdrantRepository) Upsert(ctx context.Context, docs []vector.Document) error {
 	points := make([]*pb.PointStruct, len(docs))
 	for i, d := range docs {
 		payload := map[string]*pb.Value{
@@ -53,10 +54,10 @@ func (r *QdrantRepository) Upsert(ctx context.Context, docs []Document) error {
 	return err
 }
 
-func (r *QdrantRepository) Search(ctx context.Context, vector []float32, topK int) ([]SearchResult, error) {
+func (r *QdrantRepository) Search(ctx context.Context, vec []float32, topK int) ([]vector.SearchResult, error) {
 	resp, err := r.points.Search(ctx, &pb.SearchPoints{
 		CollectionName: r.collection,
-		Vector:         vector,
+		Vector:         vec,
 		Limit:          uint64(topK),
 		WithPayload:    &pb.WithPayloadSelector{SelectorOptions: &pb.WithPayloadSelector_Enable{Enable: true}},
 	})
@@ -64,7 +65,7 @@ func (r *QdrantRepository) Search(ctx context.Context, vector []float32, topK in
 		return nil, err
 	}
 
-	results := make([]SearchResult, len(resp.Result))
+	results := make([]vector.SearchResult, len(resp.Result))
 	for i, pt := range resp.Result {
 		content := ""
 		meta := make(map[string]string)
@@ -75,7 +76,7 @@ func (r *QdrantRepository) Search(ctx context.Context, vector []float32, topK in
 				meta[k] = v.GetStringValue()
 			}
 		}
-		results[i] = SearchResult{
+		results[i] = vector.SearchResult{
 			ID:       pt.Id.GetUuid(),
 			Score:    pt.Score,
 			Content:  content,
@@ -88,3 +89,5 @@ func (r *QdrantRepository) Search(ctx context.Context, vector []float32, topK in
 func (r *QdrantRepository) Close() error {
 	return r.conn.Close()
 }
+
+var _ vector.Repository = (*QdrantRepository)(nil)

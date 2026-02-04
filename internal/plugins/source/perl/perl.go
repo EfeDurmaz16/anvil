@@ -17,6 +17,8 @@ func New() *Plugin { return &Plugin{} }
 
 func (p *Plugin) Language() string { return "perl" }
 
+func (p *Plugin) FileExtensions() []string { return []string{".pl", ".pm"} }
+
 func (p *Plugin) Parse(ctx context.Context, files []plugins.SourceFile) (*ir.SemanticGraph, error) {
 	graph := &ir.SemanticGraph{
 		CallGraph: &ir.CallGraph{},
@@ -129,7 +131,7 @@ var (
 	subPattern = regexp.MustCompile(`^\s*sub\s+([\w_]+)\s*(\([^)]*\))?\s*\{`)
 
 	// Function calls: foo(), bar($x), Foo::Bar->method(), $obj->method()
-	funcCallPattern = regexp.MustCompile(`\b([\w:]+)\s*\(`)
+	funcCallPattern   = regexp.MustCompile(`\b([\w:]+)\s*\(`)
 	methodCallPattern = regexp.MustCompile(`->([\w_]+)\s*\(`)
 
 	// Variable declarations: my $var, our @array, local %hash
