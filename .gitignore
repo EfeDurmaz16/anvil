@@ -1,0 +1,31 @@
+.DS_Store
+**/.DS_Store
+
+# Go build artifacts
+/bin/
+/anvil
+/worker
+*.exe
+*.out
+
+# Local env
+.env
+.env.local
+.env.*.local
+
+# Next.js / Node
+landing/node_modules/
+landing/.next/
+landing/.vercel/
+
+# Tooling
+.omc/
+landing/.omc/
+
+# Generated outputs / fixtures
+testdata/output/
+testdata/fixtures/
+tmp/
+out/
+/tmp/
+
