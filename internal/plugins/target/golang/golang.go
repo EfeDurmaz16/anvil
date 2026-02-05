@@ -204,7 +204,7 @@ func mapType(dt *ir.DataType) string {
 		}
 		return "int"
 	case ir.TypeDecimal:
-		// Use shopspring/decimal for COBOL precision
+		// Use shopspring/decimal for financial precision
 		return "decimal.Decimal"
 	case ir.TypeBoolean:
 		return "bool"

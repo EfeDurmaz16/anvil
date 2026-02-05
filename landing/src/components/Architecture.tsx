@@ -12,7 +12,7 @@ const features = [
   {
     icon: Plug,
     title: "Source/Target Plugins",
-    desc: "Generate TypeScript, Python, Go (and more). The plugin interface supports any source language and any target. Add a new target by implementing a TargetPlugin.",
+    desc: "Parse COBOL, Perl, and Fortran. Generate TypeScript, Python, Go, and Java. The plugin interface supports any source language and any target.",
   },
   {
     icon: Workflow,
@@ -75,7 +75,7 @@ export default function Architecture() {
           >
             <Icon size={20} className="text-[var(--color-accent)]" />
             <span className="text-base font-semibold text-[var(--color-text)]">{title}</span>
-            <p className="font-mono text-xs text-[var(--color-text-secondary)] leading-relaxed">{desc}</p>
+            <p className="font-mono text-[13px] text-[var(--color-text-secondary)] leading-relaxed">{desc}</p>
           </div>
         ))}
       </div>

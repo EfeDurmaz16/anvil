@@ -5,8 +5,8 @@ import { ChevronRight, ChevronDown, RefreshCw } from "lucide-react";
 import SectionLabel from "./SectionLabel";
 
 const agents = [
-  { num: "01", name: "Cartographer", role: "Parse & Map", desc: "Reads COBOL source, builds a semantic graph of modules, functions, data types, call graphs, and I/O contracts. No LLM needed." },
-  { num: "02", name: "Specular", role: "Extract Business Rules", desc: "AI agent analyzes the semantic graph to identify and document business rules, validation logic, and domain patterns." },
+  { num: "01", name: "Cartographer", role: "Parse & Map", desc: "Reads legacy source and builds a semantic graph of modules, functions, data types, call graphs, and I/O contracts. No LLM needed." },
+  { num: "02", name: "Specular", role: "Understand & Document", desc: "AI agent analyzes the semantic graph to extract business rules, validation logic, and domain patterns into a human-readable, debuggable intermediate representation." },
   { num: "03", name: "Architect", role: "Generate Modern Code", desc: "Transforms the enriched IR into your target stack (TypeScript, Python, Go, …). Target plugins emit a deterministic build/run manifest so orchestration stays target-agnostic." },
   { num: "04", name: "Judge", role: "Verify Equivalence", desc: "Validates behavior with regression gates (record/replay, DB diff, compilation) and produces a proof pack you can hand to enterprise reviewers. Failed? Architect retries automatically.", highlight: true },
 ];
@@ -17,7 +17,7 @@ export default function HowItWorks() {
       <div className="w-10 h-0.5 bg-[var(--color-accent)]" />
       <SectionLabel>HOW IT WORKS</SectionLabel>
       <h2 className="text-2xl md:text-[40px] font-bold text-center" style={{ color: "var(--color-text)" }}>A Pipeline of Specialized AI Agents</h2>
-      <p className="font-mono text-xs md:text-sm text-center max-w-[700px] leading-relaxed" style={{ color: "var(--color-text-dim)" }}>
+      <p className="font-mono text-[13px] md:text-sm text-center max-w-[700px] leading-relaxed" style={{ color: "var(--color-text-dim)" }}>
         Each agent has one job and does it well. The pipeline runs sequentially,
         with automatic retry loops between Architect and Judge until quality thresholds are met.
       </p>
@@ -31,7 +31,7 @@ export default function HowItWorks() {
               <span className="text-2xl md:text-[32px] font-bold text-[var(--color-accent)]">{a.num}</span>
               <span className="text-base md:text-lg font-semibold" style={{ color: "var(--color-text)" }}>{a.name}</span>
               <span className="font-mono text-[11px] font-semibold tracking-[2px] text-[var(--color-accent)]">{a.role.toUpperCase()}</span>
-              <p className="font-mono text-xs leading-relaxed" style={{ color: "var(--color-text-dim)" }}>{a.desc}</p>
+              <p className="font-mono text-[13px] leading-relaxed" style={{ color: "var(--color-text-dim)" }}>{a.desc}</p>
             </motion.div>
             {i < agents.length - 1 && (
               <>
@@ -48,7 +48,7 @@ export default function HowItWorks() {
       </div>
       <div className="flex items-center gap-2 justify-center">
         <RefreshCw size={14} className="text-[var(--color-accent)]" />
-        <span className="font-mono text-xs text-center" style={{ color: "var(--color-text-dim)" }}>Architect ↔ Judge retry loop runs until quality thresholds are met</span>
+        <span className="font-mono text-[13px] text-center" style={{ color: "var(--color-text-dim)" }}>Architect ↔ Judge retry loop runs until quality thresholds are met</span>
       </div>
     </section>
   );

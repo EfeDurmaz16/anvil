@@ -78,7 +78,7 @@ export default function FeatureGrid() {
                   className="flex flex-col gap-2 p-4 md:p-5 border border-[var(--color-border)] bg-[var(--color-bg)]"
                 >
                   <span className="text-[12px] md:text-[13px] font-semibold text-[var(--color-text)]">{c.title}</span>
-                  <span className="font-mono text-[10px] md:text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
+                  <span className="font-mono text-[11px] md:text-[13px] text-[var(--color-text-secondary)] leading-relaxed">
                     {c.desc}
                   </span>
                   <span className="font-mono text-[10px] font-medium text-[var(--color-green)]">
@@ -110,7 +110,7 @@ export default function FeatureGrid() {
               {lang.features.map((f, fi) => (
                 <li key={fi} className="flex items-start gap-2">
                   <span className="font-mono text-[10px] font-medium text-[var(--color-green)] mt-0.5">&#10003;</span>
-                  <span className="font-mono text-[11px] text-[var(--color-text-secondary)]">{f}</span>
+                  <span className="font-mono text-[13px] text-[var(--color-text-secondary)]">{f}</span>
                 </li>
               ))}
             </ul>

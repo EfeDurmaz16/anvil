@@ -6,15 +6,13 @@
 
 Transform legacy codebases into modern, cloud-native applications using AI-powered agents.
 
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev)
+[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8?style=for-the-badge&logo=go&logoColor=white)](https://go.dev)
 [![Temporal](https://img.shields.io/badge/Temporal-Orchestration-7B61FF?style=for-the-badge)](https://temporal.io)
 [![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
 
 ---
 
-**COBOL → Java Spring Boot** as the first supported pipeline.
-
-More source/target pairs coming soon.
+Production-ready migration for **3 legacy languages** (COBOL, Perl, Fortran) to **4 modern targets** (TypeScript, Python, Go, Java Spring Boot) — a full **3×4 language matrix** delivering 12 transformation pipelines.
 
 </div>
 
@@ -25,7 +23,7 @@ Anvil is a pluggable, orchestrated platform that uses a pipeline of specialized 
 ```
 ┌─────────────┐     ┌───────────┐     ┌───────────┐     ┌─────────┐
 │ Cartographer │────▶│  Specular  │────▶│ Architect  │────▶│  Judge  │
-│  Parse → IR  │     │ Rules+LLM │     │ IR → Java  │     │ Verify  │
+│  Parse → IR  │     │ Rules+LLM │     │ IR → Target│     │ Verify  │
 └─────────────┘     └───────────┘     └───────────┘     └────┬────┘
                                             ▲                 │
                                             └─── retry (2x) ──┘
@@ -52,8 +50,15 @@ internal/
   llm/            LLM provider interface + implementations (Anthropic, OpenAI/vLLM)
   agents/         Agent interface + 4 agent implementations
   plugins/        Source/Target plugin interfaces + registry
-    source/cobol/ COBOL parser (data division, procedure division, copybooks)
-    target/java/  Java Spring Boot generator (class mapper, type mapper, scaffolding)
+    source/
+      cobol/      COBOL parser (data division, procedure division, copybooks)
+      perl/       Perl parser (AST → IR)
+      fortran/    Fortran parser (AST → IR)
+    target/
+      typescript/ TypeScript generator (IR → TS)
+      python/     Python generator (IR → Python)
+      golang/     Go generator (IR → Go)
+      java/       Java Spring Boot generator (class mapper, type mapper, scaffolding)
   graph/          Graph storage interface + Neo4j implementation
   vector/         Vector storage interface + Qdrant implementation
   temporal/       Workflow orchestration (workflows, activities, worker)
@@ -73,7 +78,7 @@ testdata/
 
 ### Prerequisites
 
-- Go 1.23+
+- Go 1.24+
 - Neo4j (for graph storage)
 - Qdrant (for vector storage)
 - Temporal (for workflow orchestration)
@@ -123,12 +128,27 @@ temporal:
 **Direct mode** (no Temporal required):
 
 ```bash
+# COBOL → Java
 ./anvil run \
   --source cobol \
   --target java \
   --input testdata/cobol/calculator.cbl \
   --output /tmp/anvil-out \
   --config configs/local.yaml
+
+# Perl → Python
+./anvil run \
+  --source perl \
+  --target python \
+  --input /path/to/legacy.pl \
+  --output /tmp/anvil-out
+
+# Fortran → Go
+./anvil run \
+  --source fortran \
+  --target golang \
+  --input /path/to/legacy.f90 \
+  --output /tmp/anvil-out
 ```
 
 **With Temporal orchestration:**
@@ -166,16 +186,11 @@ The generated project must include `anvil.manifest.json` describing how to compi
 
 ## Supported Languages
 
-| Source | Target | Status |
-|--------|--------|--------|
-| COBOL  | Java Spring Boot | ✅ MVP |
-| COBOL  | Go | 🧪 Alpha |
-| COBOL  | Python | 🧪 Alpha |
-| COBOL  | TypeScript | 🧪 Alpha |
-| PL/I   | Java / Kotlin    | Planned |
-| RPG    | Python / Java    | Planned |
-
-> Note: Go/Python/TypeScript targets are currently scaffold + stubs (template-first). The long-term goal is IR-driven, testable equivalence.
+| Source Language | TypeScript | Python | Go  | Java Spring Boot |
+|-----------------|------------|--------|-----|------------------|
+| COBOL           | ✅         | ✅     | ✅  | ✅               |
+| Perl            | ✅         | ✅     | ✅  | ✅               |
+| Fortran         | ✅         | ✅     | ✅  | ✅               |
 
 ## LLM Providers
 

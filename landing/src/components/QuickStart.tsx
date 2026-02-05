@@ -5,18 +5,20 @@ import SectionLabel from "./SectionLabel";
 const terminalCode = `# Step 1: Install
 $ go install github.com/efebarandurmaz/anvil/cmd/anvil@latest
 
-# Step 2: Generate (offline by default)
+# Step 2: Modernize (pick your source + target)
 $ anvil run --source cobol --target typescript \\
   --input ./your-cobol-src \\
   --output ./generated
 
-# Step 3: See what happened
-$ anvil run --source cobol --target typescript \\
-  --input ./your-cobol-src \\
-  --output ./generated \\
-  --json | jq .
+$ anvil run --source perl --target python \\
+  --input ./your-perl-src \\
+  --output ./generated
 
-# Step 4: Regression gate (fixtures → proof pack)
+$ anvil run --source fortran --target go \\
+  --input ./your-fortran-src \\
+  --output ./generated
+
+# Step 3: Regression gate (fixtures → proof pack)
 $ anvil harness run --fixtures ./fixtures.jsonl \\
   --code ./generated \\
   --output ./proof-pack
@@ -38,7 +40,7 @@ export default function QuickStart() {
     >
       <SectionLabel>QUICK START</SectionLabel>
       <h2 className="text-2xl md:text-[40px] font-bold text-center" style={{ color: "var(--color-text)" }}>Up and running in 60 seconds.</h2>
-      <p className="font-mono text-xs md:text-[13px]" style={{ color: "var(--color-text-dim)" }}>
+      <p className="font-mono text-[13px] md:text-sm" style={{ color: "var(--color-text-dim)" }}>
         No config needed. Works offline by default.
       </p>
 
@@ -55,7 +57,7 @@ export default function QuickStart() {
         </pre>
       </div>
 
-      <p className="font-mono text-[11px] md:text-xs text-center" style={{ color: "var(--color-text-secondary)" }}>
+      <p className="font-mono text-xs md:text-[13px] text-center" style={{ color: "var(--color-text-secondary)" }}>
         Want AI-powered business rule extraction? Add your LLM provider:
       </p>
 

@@ -11,7 +11,7 @@ export default function Footer() {
         <div className="flex flex-wrap items-center gap-4 md:gap-6">
           <a href="https://github.com/EfeDurmaz16/anvil" className="font-mono text-xs transition-opacity hover:opacity-80" style={{ color: "var(--color-text-dim)" }}>GitHub</a>
           <Link href="/docs" className="font-mono text-xs transition-opacity hover:opacity-80" style={{ color: "var(--color-text-dim)" }}>Documentation</Link>
-          <a href="https://github.com/EfeDurmaz16/anvil/blob/main/CONTRIBUTING.md" className="font-mono text-xs transition-opacity hover:opacity-80" style={{ color: "var(--color-text-dim)" }}>Contributing</a>
+          <Link href="/contributing" className="font-mono text-xs transition-opacity hover:opacity-80" style={{ color: "var(--color-text-dim)" }}>Contributing</Link>
           <a href="https://github.com/EfeDurmaz16/anvil/issues" className="font-mono text-xs transition-opacity hover:opacity-80" style={{ color: "var(--color-text-dim)" }}>Issues</a>
         </div>
       </div>

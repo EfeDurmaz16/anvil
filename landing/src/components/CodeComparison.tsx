@@ -35,7 +35,7 @@ export default function CodeComparison() {
   return (
     <section className="flex flex-col items-center gap-8 md:gap-12 px-4 md:px-[120px] py-12 md:py-20">
       <SectionLabel>CODE COMPARISON</SectionLabel>
-      <h2 className="text-2xl md:text-[40px] font-bold text-center">From mainframe to microservice.</h2>
+      <h2 className="text-2xl md:text-[40px] font-bold text-center">From legacy to modern. Any source, any target.</h2>
 
       <div className="flex flex-col md:flex-row w-full gap-0">
         {/* COBOL */}

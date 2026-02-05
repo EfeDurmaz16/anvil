@@ -58,11 +58,11 @@ export default function Hero() {
       </motion.h1>
 
       <motion.p initial="hidden" animate="visible" custom={2} variants={fadeUp}
-        className="font-mono text-sm md:text-base text-center max-w-[700px] leading-relaxed px-2"
+        className="font-mono text-[15px] md:text-[17px] text-center max-w-[700px] leading-relaxed px-2"
         style={{ color: "var(--color-text-dim)" }}
       >
-        Anvil is an open-source multi-agent platform that reads your COBOL, Perl, or Fortran,
-        extracts the business logic, and generates modern TypeScript, Python, or Go — on‑prem or in your VPC.
+        Anvil is an open-source multi-agent platform that transforms COBOL, Perl, and Fortran into an understandable,
+        debuggable intermediate representation — then generates modern TypeScript, Python, Go, or Java. On‑prem or in your VPC.
       </motion.p>
 
       <motion.div initial="hidden" animate="visible" custom={3} variants={fadeUp} className="flex flex-col sm:flex-row gap-3 sm:gap-4">
@@ -83,7 +83,7 @@ export default function Hero() {
         <div className="flex-1 p-4 md:p-5 transition-colors" style={{ border: "1px solid var(--color-border-light)", backgroundColor: "var(--color-card-bg)" }}>
           <div className="flex items-center gap-2 mb-2">
             <span className="w-2 h-2 rounded-full bg-[var(--color-accent)]" />
-            <span className="font-mono text-[11px] font-medium" style={{ color: "var(--color-text-dim)" }}>legacy.cbl — COBOL Input</span>
+            <span className="font-mono text-[11px] font-medium" style={{ color: "var(--color-text-dim)" }}>legacy.cbl — Source Input</span>
           </div>
           <div className="h-px mb-3" style={{ backgroundColor: "var(--color-border-light)" }} />
           <pre className="font-mono text-[10px] md:text-xs leading-[1.7] whitespace-pre overflow-x-auto" style={{ color: "var(--color-text-dim)" }}>{cobolCode}</pre>

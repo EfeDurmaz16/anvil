@@ -29,7 +29,7 @@ export default function StatsBanner() {
         ))}
       </div>
       <p className="font-mono text-[10px] text-center" style={{ color: "var(--color-text-muted)" }}>
-        Benchmarked across 7 COBOL projects (AWS CardDemo, CobolCraft), Perl (Bugzilla), and Fortran samples.
+        Benchmarked across real-world legacy codebases: COBOL, Perl, and Fortran.
       </p>
     </section>
   );
