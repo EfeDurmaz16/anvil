@@ -14,13 +14,11 @@ var (
 	compClause  = regexp.MustCompile(`(?i)\b(COMP(?:-[1-5])?|BINARY|PACKED-DECIMAL)\b`)
 	occursClause = regexp.MustCompile(`(?i)\bOCCURS\s+(\d+)\b`)
 	valueClause = regexp.MustCompile(`(?i)\bVALUE\s+(.+?)\.?\s*$`)
-	copyStmt    = regexp.MustCompile(`(?i)\bCOPY\s+([\w-]+)`)
 	redefines   = regexp.MustCompile(`(?i)\bREDEFINES\s+([\w-]+)`)
 )
 
 func parseDataDivision(lines []string) []*ir.DataType {
 	var types []*ir.DataType
-	var copyRefs []string
 	inData := false
 
 	for _, line := range lines {
@@ -48,12 +46,6 @@ func parseDataDivision(lines []string) []*ir.DataType {
 
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
-			continue
-		}
-
-		// Detect COPY statements
-		if m := copyStmt.FindStringSubmatch(upper); len(m) > 1 {
-			copyRefs = append(copyRefs, m[1])
 			continue
 		}
 
@@ -157,16 +149,6 @@ func parseDataDivision(lines []string) []*ir.DataType {
 		}
 
 		types = append(types, dt)
-	}
-
-	// Record COPY references in metadata
-	if len(copyRefs) > 0 {
-		for _, dt := range types {
-			if dt.Metadata["level"] == "1" || dt.Metadata["level"] == "01" {
-				dt.Metadata["copy_refs"] = strings.Join(copyRefs, ",")
-				break
-			}
-		}
 	}
 
 	return types

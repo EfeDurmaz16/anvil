@@ -24,15 +24,30 @@ func (p *Plugin) Parse(ctx context.Context, files []plugins.SourceFile) (*ir.Sem
 		Metadata:  map[string]string{"source_language": "cobol"},
 	}
 
+	// Pass 1: Index copybooks and build resolver
+	resolver := NewCopybookResolver(files)
+
+	// Still extract standalone copybook data types
 	for _, f := range files {
 		ext := strings.ToLower(filepath.Ext(f.Path))
 		if ext == ".cpy" {
 			dt := parseCopybook(f)
 			graph.DataTypes = append(graph.DataTypes, dt...)
+		}
+	}
+
+	// Pass 2: Parse programs with COPY expansion
+	for _, f := range files {
+		ext := strings.ToLower(filepath.Ext(f.Path))
+		if ext == ".cpy" {
 			continue
 		}
 
-		mod := parseProgram(f)
+		// Expand COPY statements in raw source text
+		lines := strings.Split(string(f.Content), "\n")
+		expandedSource := resolver.ExpandSource(lines)
+
+		mod := parseProgramFromSource(f.Path, expandedSource)
 		graph.Modules = append(graph.Modules, mod)
 
 		for _, fn := range mod.Functions {
@@ -43,6 +58,14 @@ func (p *Plugin) Parse(ctx context.Context, files []plugins.SourceFile) (*ir.Sem
 				})
 			}
 		}
+	}
+
+	// Record resolver warnings in graph metadata
+	if warnings := resolver.Warnings(); len(warnings) > 0 {
+		graph.Metadata["copybook_warnings"] = strings.Join(warnings, "; ")
+	}
+	if resolved := resolver.Resolved(); len(resolved) > 0 {
+		graph.Metadata["copybooks_resolved"] = strings.Join(resolved, ",")
 	}
 
 	return graph, nil
@@ -71,6 +94,24 @@ func parseProgram(f plugins.SourceFile) *ir.Module {
 	mod := &ir.Module{
 		Name:     programName(f.Path, lines),
 		Path:     f.Path,
+		Language: "cobol",
+		Metadata: map[string]string{},
+	}
+
+	mod.DataTypes = parseDataDivision(lines)
+	fns, ios := parseProcedureDivision(lines)
+	mod.Functions = fns
+	mod.IOContracts = ios
+
+	return mod
+}
+
+func parseProgramFromSource(path string, source string) *ir.Module {
+	lines := strings.Split(source, "\n")
+
+	mod := &ir.Module{
+		Name:     programName(path, lines),
+		Path:     path,
 		Language: "cobol",
 		Metadata: map[string]string{},
 	}

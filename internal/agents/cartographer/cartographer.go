@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/efebarandurmaz/anvil/internal/agents"
+	"github.com/efebarandurmaz/anvil/internal/ir"
+	"github.com/efebarandurmaz/anvil/internal/migration"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 )
 
@@ -66,6 +68,24 @@ func (c *Cartographer) Run(ctx context.Context, ac *agents.AgentContext) (*agent
 	}
 
 	result.Graph = graph
+
+	// Compute fingerprints for incremental migration support
+	deps := buildDependencyMap(graph)
+	fingerprints := migration.ComputeFingerprints(files, deps)
+	fpCount := len(fingerprints)
+
+	// Store fingerprint summary in metadata
+	result.Metadata["fingerprints_computed"] = fmt.Sprintf("%d", fpCount)
+
+	// Store state if output path is provided
+	if outputPath := ac.Params["output"]; outputPath != "" {
+		state := migration.NewMigrationState(sourceLang, ac.Params["target"])
+		state.Fingerprints = fingerprints
+		if err := state.Save(outputPath); err != nil {
+			result.AddWarning(fmt.Sprintf("failed to save migration state: %v", err))
+		}
+	}
+
 	result.Status = agents.StatusSuccess
 
 	// Count output items (modules and functions)
@@ -137,4 +157,36 @@ func extensionSet(src plugins.SourcePlugin) map[string]bool {
 		out[ext] = true
 	}
 	return out
+}
+
+// buildDependencyMap extracts dependency relationships from the graph.
+// Currently maps modules to their copybook/include dependencies.
+func buildDependencyMap(graph *ir.SemanticGraph) map[string][]string {
+	deps := make(map[string][]string)
+
+	for _, mod := range graph.Modules {
+		if mod.Metadata == nil {
+			continue
+		}
+		// Check for copy_refs metadata (set by COBOL parser)
+		if refs, ok := mod.Metadata["copy_refs"]; ok && refs != "" {
+			for _, ref := range strings.Split(refs, ",") {
+				ref = strings.TrimSpace(ref)
+				if ref != "" {
+					deps[mod.Path] = append(deps[mod.Path], ref)
+				}
+			}
+		}
+		// Check for copybooks_resolved metadata
+		if resolved, ok := mod.Metadata["copybooks_resolved"]; ok && resolved != "" {
+			for _, name := range strings.Split(resolved, ",") {
+				name = strings.TrimSpace(name)
+				if name != "" {
+					deps[mod.Path] = append(deps[mod.Path], name+".cpy")
+				}
+			}
+		}
+	}
+
+	return deps
 }

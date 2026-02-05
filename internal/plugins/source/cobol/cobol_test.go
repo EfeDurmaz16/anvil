@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/efebarandurmaz/anvil/internal/plugins"
@@ -174,5 +175,87 @@ func TestParseCardDemo(t *testing.T) {
 	// CardDemo should have significantly more than 29 functions now
 	if totalFns < 100 {
 		t.Errorf("expected at least 100 functions from CardDemo, got %d", totalFns)
+	}
+}
+
+func TestCopybookExpansion(t *testing.T) {
+	cpySrc := []byte("       01 CUSTOMER-RECORD.\n           05 CUST-ID PIC 9(8).\n           05 CUST-NAME PIC X(30).\n")
+	mainSrc := []byte("       IDENTIFICATION DIVISION.\n       PROGRAM-ID. TESTCOPY.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       COPY CUSTCPY.\n       PROCEDURE DIVISION.\n       MAIN-PARAGRAPH.\n           DISPLAY CUST-ID.\n           STOP RUN.\n")
+
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "CUSTCPY.cpy", Content: cpySrc},
+		{Path: "testcopy.cbl", Content: mainSrc},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Modules) != 1 {
+		t.Fatalf("expected 1 module, got %d", len(graph.Modules))
+	}
+	mod := graph.Modules[0]
+	if mod.Name != "TESTCOPY" {
+		t.Errorf("expected TESTCOPY, got %s", mod.Name)
+	}
+	// After expansion, the module should have the copybook's data types
+	foundCustID := false
+	for _, dt := range mod.DataTypes {
+		if dt.Name == "CUST-ID" {
+			foundCustID = true
+		}
+	}
+	if !foundCustID {
+		t.Error("expected CUST-ID from expanded copybook in module data types")
+	}
+}
+
+func TestCopybookReplacingLeading(t *testing.T) {
+	cpySrc := []byte("       05 PREFIX-X PIC 9(5).\n       05 PREFIX-Y PIC 9(5).\n")
+	mainSrc := []byte("       IDENTIFICATION DIVISION.\n       PROGRAM-ID. TESTREPL.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       01 MY-RECORD.\n       COPY COORDS REPLACING LEADING ==PREFIX== BY ==PLAYER==.\n       PROCEDURE DIVISION.\n       MAIN-PARAGRAPH.\n           STOP RUN.\n")
+
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "COORDS.cpy", Content: cpySrc},
+		{Path: "testrepl.cbl", Content: mainSrc},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mod := graph.Modules[0]
+	foundPlayerX := false
+	foundPlayerY := false
+	for _, dt := range mod.DataTypes {
+		if dt.Name == "PLAYER-X" {
+			foundPlayerX = true
+		}
+		if dt.Name == "PLAYER-Y" {
+			foundPlayerY = true
+		}
+	}
+	if !foundPlayerX {
+		t.Error("expected PLAYER-X after LEADING REPLACING")
+	}
+	if !foundPlayerY {
+		t.Error("expected PLAYER-Y after LEADING REPLACING")
+	}
+}
+
+func TestCopybookMissingWarns(t *testing.T) {
+	mainSrc := []byte("       IDENTIFICATION DIVISION.\n       PROGRAM-ID. TESTMISS.\n       DATA DIVISION.\n       WORKING-STORAGE SECTION.\n       COPY DFHAID.\n       COPY NONEXIST.\n       PROCEDURE DIVISION.\n       MAIN-PARAGRAPH.\n           STOP RUN.\n")
+
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "testmiss.cbl", Content: mainSrc},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Should have warnings for missing copybooks but no error
+	warnings := graph.Metadata["copybook_warnings"]
+	if !strings.Contains(warnings, "DFHAID") {
+		t.Error("expected warning about system copybook DFHAID")
+	}
+	if !strings.Contains(warnings, "NONEXIST") {
+		t.Error("expected warning about missing copybook NONEXIST")
 	}
 }

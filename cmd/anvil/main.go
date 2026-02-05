@@ -13,6 +13,7 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/agents/cartographer"
 	"github.com/efebarandurmaz/anvil/internal/agents/judge"
 	"github.com/efebarandurmaz/anvil/internal/agents/specular"
+	"github.com/efebarandurmaz/anvil/internal/agents/testgen"
 	"github.com/efebarandurmaz/anvil/internal/config"
 	"github.com/efebarandurmaz/anvil/internal/harness"
 	"github.com/efebarandurmaz/anvil/internal/llm"
@@ -339,6 +340,40 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 
 		if judgeResult.Score >= 0.8 {
 			break
+		}
+	}
+
+	// Step 5: TestGen (optional)
+	if ac := os.Getenv("ANVIL_GENERATE_TESTS"); ac == "true" || ac == "1" {
+		fmt.Println("\n=== TestGen: Generating tests ===")
+		start = time.Now()
+		tg := testgen.New()
+		tgResult, err := tg.Run(ctx, &agents.AgentContext{
+			Graph:    cartResult.Graph,
+			LLM:      provider,
+			Registry: registry,
+			Params: map[string]string{
+				"target":          targetLang,
+				"generated_files": "present",
+			},
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: testgen failed: %v\n", err)
+		} else {
+			m.AddAgent("testgen", time.Since(start), "stub", len(tgResult.Errors))
+			fmt.Printf("  Generated %d test files\n", len(tgResult.GeneratedFiles))
+
+			// Write test files alongside main output
+			for _, f := range tgResult.GeneratedFiles {
+				outPath := filepath.Join(outputPath, f.Path)
+				if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to create test dir: %v\n", err)
+					continue
+				}
+				if err := os.WriteFile(outPath, f.Content, 0o644); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to write test file: %v\n", err)
+				}
+			}
 		}
 	}
 

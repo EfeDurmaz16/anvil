@@ -39,6 +39,9 @@ export default function Header() {
           <Link href="/docs" className="font-mono text-[13px] hover:opacity-80 transition-colors" style={{ color: "var(--color-text-dim)" }}>
             Docs
           </Link>
+          <Link href="/pricing" className="font-mono text-[13px] hover:opacity-80 transition-colors" style={{ color: "var(--color-text-dim)" }}>
+            Pricing
+          </Link>
           <button onClick={toggle} className="p-2 rounded transition-colors hover:opacity-80" style={{ color: "var(--color-text-secondary)" }} aria-label="Toggle theme">
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -69,6 +72,9 @@ export default function Header() {
           ))}
           <Link href="/docs" onClick={() => setOpen(false)} className="font-mono text-sm py-2 hover:opacity-80" style={{ color: "var(--color-text-dim)" }}>
             Docs
+          </Link>
+          <Link href="/pricing" onClick={() => setOpen(false)} className="font-mono text-sm py-2 hover:opacity-80" style={{ color: "var(--color-text-dim)" }}>
+            Pricing
           </Link>
           <a href="https://github.com/EfeDurmaz16/anvil" target="_blank" rel="noopener noreferrer"
             className="flex items-center gap-2 bg-[var(--color-accent)] text-black font-mono text-xs font-semibold px-4 py-2 mt-2 w-fit hover:brightness-110 transition">
