@@ -2,7 +2,7 @@
 # Multi-stage build for minimal runtime image.
 
 # Stage 1: Build
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
 

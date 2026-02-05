@@ -242,6 +242,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		m.LLMMode = "passthrough"
 		fmt.Println("Running without LLM (template-only mode)")
 	} else {
+		provider = llm.WithRateLimit(provider, llm.DefaultRateLimitConfig())
 		m.LLMMode = "llm:" + provider.Name()
 		fmt.Printf("Using LLM provider: %s\n", provider.Name())
 	}
@@ -314,8 +315,8 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		j := judge.New()
 		genFilesJSON, _ := json.Marshal(archResult.GeneratedFiles)
 		judgeResult, err := j.Run(ctx, &agents.AgentContext{
-			Graph:  cartResult.Graph,
-			LLM:    provider,
+			Graph: cartResult.Graph,
+			LLM:   provider,
 			Params: map[string]string{
 				"source":          sourceLang,
 				"target":          targetLang,

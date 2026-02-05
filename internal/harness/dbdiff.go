@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -83,6 +84,13 @@ type DBDiffer struct {
 	normalizeColumns map[string]bool
 }
 
+var identifierRegex = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// isValidIdentifier validates that a string is a safe SQL identifier.
+func isValidIdentifier(s string) bool {
+	return identifierRegex.MatchString(s)
+}
+
 // NewDBDiffer creates a new database differ.
 func NewDBDiffer(config *DBDiffConfig) *DBDiffer {
 	d := &DBDiffer{
@@ -147,20 +155,25 @@ func (d *DBDiffer) TakeSnapshot(ctx context.Context) (*DBSnapshot, error) {
 }
 
 func (d *DBDiffer) snapshotTable(ctx context.Context, table string) (*TableSnapshot, error) {
+	// Validate table name to prevent SQL injection
+	if !isValidIdentifier(table) {
+		return nil, fmt.Errorf("invalid table name: %s", table)
+	}
+
 	snapshot := &TableSnapshot{
 		Name: table,
 		Rows: make(map[string]map[string]interface{}),
 	}
 
-	// Get columns
-	colQuery := fmt.Sprintf(`
+	// Get columns - use parameterized query for WHERE clause
+	colQuery := `
 		SELECT column_name
 		FROM information_schema.columns
-		WHERE table_name = '%s'
+		WHERE table_name = $1
 		ORDER BY ordinal_position
-	`, table)
+	`
 
-	rows, err := d.db.QueryContext(ctx, colQuery)
+	rows, err := d.db.QueryContext(ctx, colQuery, table)
 	if err != nil {
 		return nil, fmt.Errorf("get columns: %w", err)
 	}

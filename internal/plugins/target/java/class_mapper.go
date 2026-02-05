@@ -12,7 +12,7 @@ func generateFromTemplate(mod *ir.Module, className string) string {
 	for _, fn := range mod.Functions {
 		methods.WriteString(fmt.Sprintf(`
     public void %s() {
-        // TODO: Migrated from COBOL paragraph %s
+        // TODO: Migrated from source paragraph %s
         System.out.println("Executing %s");
     }
 `, toCamelCase(fn.Name), fn.Name, fn.Name))

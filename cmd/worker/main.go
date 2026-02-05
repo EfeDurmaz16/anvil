@@ -14,6 +14,8 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/llm/openai"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 	cobolplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/cobol"
+	fortranplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/fortran"
+	perlplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/perl"
 	goplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/golang"
 	javaplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/java"
 	pythonplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/python"
@@ -36,6 +38,8 @@ func main() {
 
 	registry := plugins.NewRegistry()
 	registry.RegisterSource(cobolplugin.New())
+	registry.RegisterSource(perlplugin.New())
+	registry.RegisterSource(fortranplugin.New())
 	registry.RegisterTarget(javaplugin.New())
 	registry.RegisterTarget(pythonplugin.New())
 	registry.RegisterTarget(goplugin.New())
@@ -77,6 +81,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("creating LLM provider: %v", err)
 	}
+
+	// Wire rate limiter before SetDependencies
+	provider = llm.WithRateLimit(provider, llm.DefaultRateLimitConfig())
 
 	temporalmod.SetDependencies(&temporalmod.Dependencies{
 		LLM:      agents.AgentContext{LLM: provider},

@@ -50,7 +50,7 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 
 	for _, mod := range ac.Graph.Modules {
 		for _, fn := range mod.Functions {
-			rules, err := extractRules(ctx, ac.LLM, mod.Name, fn)
+			rules, err := extractRules(ctx, ac.LLM, mod.Language, mod.Name, fn)
 			result.Metrics.LLMCalls++
 
 			if err != nil {
@@ -80,9 +80,9 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 	return result, nil
 }
 
-func extractRules(ctx context.Context, provider llm.Provider, module string, fn *ir.Function) ([]*ir.BusinessRule, error) {
+func extractRules(ctx context.Context, provider llm.Provider, sourceLang string, module string, fn *ir.Function) ([]*ir.BusinessRule, error) {
 	prompt := &llm.Prompt{
-		SystemPrompt: "You are a COBOL business rule extraction expert. Given a function body, extract business rules as JSON array with fields: id, description, confidence (0-1), tags.",
+		SystemPrompt: fmt.Sprintf("You are a %s business rule extraction expert. Given a function body, extract business rules as JSON array with fields: id, description, confidence (0-1), tags.", sourceLang),
 		Messages: []llm.Message{
 			{Role: llm.RoleUser, Content: fmt.Sprintf("Module: %s\nFunction: %s\nBody:\n%s", module, fn.Name, fn.Body)},
 		},

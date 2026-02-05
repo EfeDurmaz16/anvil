@@ -69,7 +69,7 @@ func generateGoFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Funct
 	fnCtx.WriteString(fmt.Sprintf("Module: %s\n", mod.Name))
 	fnCtx.WriteString(fmt.Sprintf("Function: %s\n", fn.Name))
 	if fn.Body != "" {
-		fnCtx.WriteString(fmt.Sprintf("Original COBOL Body:\n%s\n", fn.Body))
+		fnCtx.WriteString(fmt.Sprintf("Original Source Body:\n%s\n", fn.Body))
 	}
 
 	// Include business rules
@@ -80,19 +80,19 @@ func generateGoFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Funct
 	}
 
 	prompt := &llm.Prompt{
-		SystemPrompt: `You are a COBOL to Go migration expert. Generate clean, idiomatic Go code.
+		SystemPrompt: `You are a legacy-to-Go migration expert. Generate clean, idiomatic Go code.
 Rules:
-1. Preserve exact business logic from the original COBOL
+1. Preserve exact business logic from the original source
 2. Use idiomatic Go patterns (error handling, interfaces, etc.)
 3. Add comments explaining the business logic
 4. Handle edge cases with proper error returns
 5. Return ONLY the function body (no func signature, no receiver)
-6. CRITICAL: Use shopspring/decimal for ALL financial/monetary calculations to preserve COBOL precision
+6. CRITICAL: Use shopspring/decimal for ALL financial/monetary calculations to preserve precision
    - import "github.com/shopspring/decimal"
    - Use: decimal.NewFromString("10.50").Add(decimal.NewFromString("5.25"))
    - Never use float64 for money`,
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this COBOL function to Go:\n\n%s", fnCtx.String())},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this function to Go:\n\n%s", fnCtx.String())},
 		},
 	}
 

@@ -14,8 +14,50 @@ func TestScaffold(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 2 {
-		t.Fatalf("expected 2 scaffold files, got %d", len(files))
+	if len(files) != 4 {
+		t.Fatalf("expected 4 scaffold files, got %d", len(files))
+	}
+}
+
+func TestScaffold_IncludesManifest(t *testing.T) {
+	p := New()
+	files, err := p.Scaffold(context.Background(), &ir.SemanticGraph{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var hasManifest, hasRunner bool
+	for _, f := range files {
+		if f.Path == "anvil.manifest.json" {
+			hasManifest = true
+			content := string(f.Content)
+			if !strings.Contains(content, `"language": "java"`) {
+				t.Error("manifest missing language field")
+			}
+			if !strings.Contains(content, "mvn") {
+				t.Error("manifest missing mvn compile command")
+			}
+			if !strings.Contains(content, "run_fixture") {
+				t.Error("manifest missing run_fixture")
+			}
+		}
+		if f.Path == "src/main/java/com/anvil/generated/AnvilRunner.java" {
+			hasRunner = true
+			content := string(f.Content)
+			if !strings.Contains(content, "class AnvilRunner") {
+				t.Error("AnvilRunner missing class definition")
+			}
+			if !strings.Contains(content, "public static void main") {
+				t.Error("AnvilRunner missing main method")
+			}
+		}
+	}
+
+	if !hasManifest {
+		t.Error("scaffold missing anvil.manifest.json")
+	}
+	if !hasRunner {
+		t.Error("scaffold missing AnvilRunner.java")
 	}
 }
 

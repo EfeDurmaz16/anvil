@@ -57,16 +57,18 @@ func (p *Plugin) Generate(ctx context.Context, graph *ir.SemanticGraph, provider
 
 func (p *Plugin) Scaffold(ctx context.Context, graph *ir.SemanticGraph) ([]plugins.GeneratedFile, error) {
 	return []plugins.GeneratedFile{
+		{Path: "anvil.manifest.json", Content: []byte(anvilManifestJSON)},
 		{Path: "pom.xml", Content: []byte(pomXML)},
 		{Path: "src/main/java/com/anvil/generated/Application.java", Content: []byte(applicationJava)},
+		{Path: "src/main/java/com/anvil/generated/AnvilRunner.java", Content: []byte(anvilRunnerJava)},
 	}, nil
 }
 
 func generateWithLLM(ctx context.Context, provider llm.Provider, mod *ir.Module, className string) (string, error) {
 	prompt := &llm.Prompt{
-		SystemPrompt: "You are a COBOL-to-Java migration expert. Convert the given COBOL module to a Java Spring Boot service class. Output only the Java source code, no explanation.",
+		SystemPrompt: "You are a legacy-to-Java migration expert. Convert the given module to a Java Spring Boot service class. Output only the Java source code, no explanation.",
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this COBOL module to Java:\nModule: %s\nFunctions: %v\nGenerate class name: %s", mod.Name, functionSummary(mod), className)},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this module to Java:\nModule: %s\nFunctions: %v\nGenerate class name: %s", mod.Name, functionSummary(mod), className)},
 		},
 	}
 	resp, err := provider.Complete(ctx, prompt, nil)

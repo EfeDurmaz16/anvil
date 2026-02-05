@@ -70,7 +70,11 @@ func generatePythonFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.F
 	fnCtx.WriteString(fmt.Sprintf("Module: %s\n", mod.Name))
 	fnCtx.WriteString(fmt.Sprintf("Function: %s\n", fn.Name))
 	if fn.Body != "" {
-		fnCtx.WriteString(fmt.Sprintf("Original COBOL Body:\n%s\n", fn.Body))
+		lang := mod.Language
+		if lang == "" {
+			lang = "legacy"
+		}
+		fnCtx.WriteString(fmt.Sprintf("Original %s Body:\n%s\n", lang, fn.Body))
 	}
 
 	// Include business rules
@@ -80,20 +84,25 @@ func generatePythonFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.F
 		}
 	}
 
+	lang := mod.Language
+	if lang == "" {
+		lang = "legacy"
+	}
+
 	prompt := &llm.Prompt{
-		SystemPrompt: `You are a COBOL to Python migration expert. Generate clean, idiomatic Python code.
+		SystemPrompt: fmt.Sprintf(`You are a %s to Python migration expert. Generate clean, idiomatic Python code.
 Rules:
-1. Preserve exact business logic from the original COBOL
+1. Preserve exact business logic from the original %s
 2. Use modern Python features (type hints, dataclasses, etc.)
 3. Add docstrings explaining the business logic
 4. Handle edge cases appropriately
 5. Return ONLY the function body (no class wrapper, no def line)
-6. CRITICAL: Use stdlib decimal.Decimal for ALL financial/monetary calculations to preserve COBOL precision
+6. CRITICAL: Use stdlib decimal.Decimal for ALL financial/monetary calculations to preserve %s precision
    - from decimal import Decimal
    - Use: Decimal('10.50') + Decimal('5.25')
-   - Never use float for money`,
+   - Never use float for money`, lang, lang, lang),
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this COBOL function to Python:\n\n%s", fnCtx.String())},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to Python:\n\n%s", lang, fnCtx.String())},
 		},
 	}
 

@@ -1,6 +1,6 @@
 module github.com/efebarandurmaz/anvil
 
-go 1.25.1
+go 1.24.0
 
 require (
 	github.com/neo4j/neo4j-go-driver/v5 v5.28.4

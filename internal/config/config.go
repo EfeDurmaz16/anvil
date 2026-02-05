@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -48,6 +49,28 @@ type LogConfig struct {
 	Format string `mapstructure:"format"`
 }
 
+// Validate checks configuration for issues and returns warnings.
+func (c *Config) Validate() []string {
+	var warnings []string
+
+	// Check for empty API key with active provider
+	if c.LLM.Provider != "" && c.LLM.APIKey == "" {
+		warnings = append(warnings, fmt.Sprintf("LLM provider '%s' is configured but api_key is empty", c.LLM.Provider))
+	}
+
+	// Check temperature range [0, 2.0]
+	if c.LLM.Temperature < 0 || c.LLM.Temperature > 2.0 {
+		warnings = append(warnings, fmt.Sprintf("LLM temperature %.2f is outside recommended range [0.0, 2.0]", c.LLM.Temperature))
+	}
+
+	// Check for negative max_tokens
+	if c.LLM.MaxTokens < 0 {
+		warnings = append(warnings, fmt.Sprintf("LLM max_tokens %d is negative", c.LLM.MaxTokens))
+	}
+
+	return warnings
+}
+
 // Load reads configuration from file and environment.
 func Load(path string) (*Config, error) {
 	v := viper.New()
@@ -64,5 +87,13 @@ func Load(path string) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshalling config: %w", err)
 	}
+
+	// Validate configuration and print warnings
+	if warnings := cfg.Validate(); len(warnings) > 0 {
+		for _, warning := range warnings {
+			fmt.Fprintf(os.Stderr, "Warning: %s\n", warning)
+		}
+	}
+
 	return &cfg, nil
 }

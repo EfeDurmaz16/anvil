@@ -87,7 +87,11 @@ func buildFunctionContext(mod *ir.Module, fn *ir.Function, graph *ir.SemanticGra
 	ctx.WriteString(fmt.Sprintf("Function: %s\n", fn.Name))
 
 	if fn.Body != "" {
-		ctx.WriteString(fmt.Sprintf("Original COBOL Body:\n%s\n", fn.Body))
+		lang := mod.Language
+		if lang == "" {
+			lang = "legacy"
+		}
+		ctx.WriteString(fmt.Sprintf("Original %s Body:\n%s\n", lang, fn.Body))
 	}
 
 	// Include business rules if available
@@ -115,21 +119,32 @@ func buildFunctionContext(mod *ir.Module, fn *ir.Function, graph *ir.SemanticGra
 
 // generateFunctionWithLLM generates a single function implementation using LLM.
 func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext string, provider llm.Provider) string {
+	lang := "legacy"
+	if fn.Name != "" {
+		// Extract language from module context if available
+		for _, m := range strings.Split(fnContext, "\n") {
+			if strings.HasPrefix(m, "Module: ") && strings.Contains(fnContext, "Language:") {
+				// Language is embedded in context
+				break
+			}
+		}
+	}
+
 	prompt := &llm.Prompt{
-		SystemPrompt: `You are a COBOL to TypeScript migration expert. Generate clean, idiomatic TypeScript code.
+		SystemPrompt: fmt.Sprintf(`You are a %s to TypeScript migration expert. Generate clean, idiomatic TypeScript code.
 Rules:
-1. Preserve the exact business logic from the original COBOL
+1. Preserve the exact business logic from the original %s
 2. Use modern TypeScript features (async/await, optional chaining, etc.)
 3. Add proper type annotations
 4. Include JSDoc comments explaining the business logic
 5. Handle edge cases and errors appropriately
 6. Return ONLY the TypeScript function body (no class wrapper)
-7. CRITICAL: Use Decimal.js for ALL financial/monetary calculations to preserve COBOL precision
+7. CRITICAL: Use Decimal.js for ALL financial/monetary calculations to preserve %s precision
    - Import: import Decimal from 'decimal.js';
    - Use: new Decimal(value).plus(other).toNumber()
-   - Never use native JavaScript number arithmetic for money`,
+   - Never use native JavaScript number arithmetic for money`, lang, lang, lang),
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this COBOL function to TypeScript:\n\n%s", fnContext)},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to TypeScript:\n\n%s", lang, fnContext)},
 		},
 	}
 
@@ -144,7 +159,7 @@ Rules:
 
 	// Wrap in method signature
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("  /**\n   * Migrated from COBOL: %s\n", fn.Name))
+	b.WriteString(fmt.Sprintf("  /**\n   * Migrated from %s: %s\n", lang, fn.Name))
 	if fn.Body != "" {
 		// Add truncated original as reference
 		orig := fn.Body

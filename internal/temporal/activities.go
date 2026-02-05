@@ -135,7 +135,10 @@ func ArchitectActivity(ctx context.Context, input ModernizationInput, graphJSON 
 		return ActivityResult{}, err
 	}
 
-	gOut, _ := json.Marshal(result.Graph)
+	gOut, err := json.Marshal(result.Graph)
+	if err != nil {
+		return ActivityResult{}, fmt.Errorf("marshal graph: %w", err)
+	}
 	return ActivityResult{GraphJSON: string(gOut), FilesJSON: string(filesJSON)}, nil
 }
 
@@ -161,7 +164,10 @@ func JudgeActivity(ctx context.Context, input ModernizationInput, graphJSON, fil
 		return ActivityResult{}, err
 	}
 
-	gOut, _ := json.Marshal(result.Graph)
+	gOut, err := json.Marshal(result.Graph)
+	if err != nil {
+		return ActivityResult{}, fmt.Errorf("marshal graph: %w", err)
+	}
 	return ActivityResult{
 		GraphJSON: string(gOut),
 		Score:     result.Score,
