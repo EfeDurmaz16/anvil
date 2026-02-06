@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
@@ -67,12 +68,36 @@ func generateServiceWithLLM(ctx context.Context, mod *ir.Module, svcName string,
 
 	b.WriteString(fmt.Sprintf("export class %s {\n", svcName))
 
-	for _, fn := range mod.Functions {
-		// Build context for LLM
-		fnContext := buildFunctionContext(mod, fn, graph)
+	// Generate functions concurrently with worker pool
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
-		// Generate function implementation via LLM
-		impl := generateFunctionWithLLM(ctx, fn, fnContext, provider)
+	results := make([]string, len(mod.Functions))
+
+	for i, fn := range mod.Functions {
+		wg.Add(1)
+		sem <- struct{}{} // acquire
+		go func(idx int, f *ir.Function) {
+			defer wg.Done()
+			defer func() { <-sem }() // release
+
+			// Build context for LLM
+			fnContext := buildFunctionContext(mod, f, graph)
+
+			// Generate function implementation via LLM
+			impl := generateFunctionWithLLM(ctx, f, fnContext, provider)
+
+			mu.Lock()
+			results[idx] = impl
+			mu.Unlock()
+		}(i, fn)
+	}
+	wg.Wait()
+
+	// Write results in order
+	for _, impl := range results {
 		b.WriteString(impl)
 	}
 
@@ -117,6 +142,66 @@ func buildFunctionContext(mod *ir.Module, fn *ir.Function, graph *ir.SemanticGra
 	return ctx.String()
 }
 
+// stripMarkdownFences removes markdown code fences from LLM output.
+func stripMarkdownFences(s string) string {
+	lines := strings.Split(s, "\n")
+
+	// Find and remove leading fence
+	start := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			start = i + 1
+			break
+		}
+	}
+
+	// Find and remove trailing fence
+	end := len(lines)
+	for i := len(lines) - 1; i >= start; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "```") {
+			end = i
+			break
+		}
+	}
+
+	// If no fences found, return original
+	if start == 0 && end == len(lines) {
+		return s
+	}
+
+	return strings.Join(lines[start:end], "\n")
+}
+
+// sanitizeLLMOutput strips import/export statements and standalone function
+// wrappers that LLMs commonly include despite instructions not to.
+func sanitizeLLMOutput(s string) string {
+	lines := strings.Split(s, "\n")
+	var cleaned []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Skip import statements
+		if strings.HasPrefix(trimmed, "import ") {
+			continue
+		}
+		// Skip export statements
+		if strings.HasPrefix(trimmed, "export ") {
+			continue
+		}
+		// Strip trailing prose (non-code text after the implementation)
+		if strings.HasPrefix(trimmed, "This ") || strings.HasPrefix(trimmed, "Note:") || strings.HasPrefix(trimmed, "The above") {
+			break
+		}
+		cleaned = append(cleaned, line)
+	}
+	// Trim trailing empty lines
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+	return strings.Join(cleaned, "\n")
+}
+
 // generateFunctionWithLLM generates a single function implementation using LLM.
 func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext string, provider llm.Provider) string {
 	lang := "legacy"
@@ -131,20 +216,34 @@ func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext str
 	}
 
 	prompt := &llm.Prompt{
-		SystemPrompt: fmt.Sprintf(`You are a %s to TypeScript migration expert. Generate clean, idiomatic TypeScript code.
+		SystemPrompt: fmt.Sprintf(`You are a %s to TypeScript migration expert.
+
+CRITICAL OUTPUT FORMAT RULES:
+- Return ONLY the implementation lines that go INSIDE a method body
+- Do NOT include import statements (imports are handled externally)
+- Do NOT include function/class declarations or export statements
+- Do NOT wrap code in markdown fences
+- The code will be placed inside a class method, so write only the body
+- Use Decimal.js as: new Decimal(value).plus(other).toNumber() — assume it is already imported
+
+Example of CORRECT output:
+const result = new Decimal(num1).plus(new Decimal(num2));
+console.log("SUM: " + result.toNumber());
+return result.toNumber();
+
+Example of WRONG output (do NOT do this):
+import Decimal from 'decimal.js';
+export function addNumbers() {
+  ...
+}
+
 Rules:
-1. Preserve the exact business logic from the original %s
-2. Use modern TypeScript features (async/await, optional chaining, etc.)
-3. Add proper type annotations
-4. Include JSDoc comments explaining the business logic
-5. Handle edge cases and errors appropriately
-6. Return ONLY the TypeScript function body (no class wrapper)
-7. CRITICAL: Use Decimal.js for ALL financial/monetary calculations to preserve %s precision
-   - Import: import Decimal from 'decimal.js';
-   - Use: new Decimal(value).plus(other).toNumber()
-   - Never use native JavaScript number arithmetic for money`, lang, lang, lang),
+1. Preserve the exact business logic from the original %s code
+2. Use modern TypeScript (async/await, optional chaining)
+3. Add brief inline comments for business logic
+4. Handle edge cases appropriately`, lang, lang),
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to TypeScript:\n\n%s", lang, fnContext)},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to TypeScript method body:\n\n%s\n\nReturn ONLY the method body lines, no imports or function wrappers.", lang, fnContext)},
 		},
 	}
 
@@ -155,7 +254,8 @@ Rules:
 	}
 
 	// Extract and format the response
-	impl := strings.TrimSpace(resp.Content)
+	impl := strings.TrimSpace(stripMarkdownFences(resp.Content))
+	impl = sanitizeLLMOutput(impl)
 
 	// Wrap in method signature
 	var b strings.Builder

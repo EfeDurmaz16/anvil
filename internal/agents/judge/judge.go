@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/efebarandurmaz/anvil/internal/agents"
+	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 )
@@ -69,26 +71,50 @@ func (j *Judge) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Agent
 	verified := 0
 	failed := 0
 
+	// Collect all functions to verify
+	type verifyJob struct {
+		mod *ir.Module
+		fn  *ir.Function
+	}
+	var jobs []verifyJob
 	for _, mod := range ac.Graph.Modules {
 		for _, fn := range mod.Functions {
-			ok, reason, err := verifyFunction(ctx, ac.LLM, sourceLang, targetLang, mod.Name, fn.Name, fn.Body, generatedText)
-			result.Metrics.LLMCalls++
+			jobs = append(jobs, verifyJob{mod: mod, fn: fn})
+		}
+	}
 
+	// Verify functions concurrently with worker pool
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	for _, job := range jobs {
+		wg.Add(1)
+		sem <- struct{}{} // acquire
+		go func(j verifyJob) {
+			defer wg.Done()
+			defer func() { <-sem }() // release
+
+			ok, reason, err := verifyFunction(ctx, ac.LLM, sourceLang, targetLang, j.mod.Name, j.fn.Name, j.fn.Body, generatedText)
+
+			mu.Lock()
+			result.Metrics.LLMCalls++
 			if err != nil {
-				result.AddError(fmt.Sprintf("verify %s.%s: %v", mod.Name, fn.Name, err))
+				result.AddError(fmt.Sprintf("verify %s.%s: %v", j.mod.Name, j.fn.Name, err))
 				score -= 0.1
 				failed++
-				continue
-			}
-			if !ok {
-				result.AddError(fmt.Sprintf("%s.%s: %s", mod.Name, fn.Name, reason))
+			} else if !ok {
+				result.AddError(fmt.Sprintf("%s.%s: %s", j.mod.Name, j.fn.Name, reason))
 				score -= 0.2
 				failed++
 			} else {
 				verified++
 			}
-		}
+			mu.Unlock()
+		}(job)
 	}
+	wg.Wait()
 
 	if score < 0 {
 		score = 0
@@ -120,12 +146,17 @@ type verdict struct {
 func verifyFunction(ctx context.Context, provider llm.Provider, sourceLang, targetLang, module, fnName, originalBody, generatedCode string) (bool, string, error) {
 	prompt := &llm.Prompt{
 		SystemPrompt: fmt.Sprintf(
-			"You are a code equivalence verifier. Compare the original %s function with the generated %s code for semantic equivalence. "+
-				"Respond with STRICT JSON only: {\"equivalent\": true/false, \"reason\": \"...\"}. No extra text.",
+			"You are a code equivalence verifier. Compare the original %s function with the generated %s code.\n"+
+				"You MUST respond with ONLY a JSON object, nothing else.\n\n"+
+				"Example response:\n"+
+				"{\"equivalent\": true, \"reason\": \"Logic preserved correctly\"}\n\n"+
+				"Another example:\n"+
+				"{\"equivalent\": false, \"reason\": \"Missing error handling branch\"}\n\n"+
+				"Respond with JSON ONLY. No markdown, no explanation, no code fences.",
 			sourceLang, targetLang,
 		),
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Original %s function %s.%s:\n%s\n\nGenerated %s code (excerpt):\n%s", sourceLang, module, fnName, originalBody, targetLang, generatedCode)},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Original %s function %s.%s:\n%s\n\nGenerated %s code (excerpt):\n%s\n\nRespond with JSON only: {\"equivalent\": true/false, \"reason\": \"...\"}", sourceLang, module, fnName, originalBody, targetLang, generatedCode)},
 		},
 	}
 
@@ -213,7 +244,33 @@ func parseVerdict(text string) (*verdict, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("judge: invalid JSON verdict: %q", truncate(text, 200))
+	// Fallback: heuristic analysis of free-text response for models that
+	// don't follow JSON instructions (common with smaller LLMs).
+	lower := strings.ToLower(text)
+	positiveSignals := []string{"equivalent", "semantically correct", "logic is preserved", "correctly translated", "matches the original", "faithful"}
+	negativeSignals := []string{"not equivalent", "missing", "incorrect", "differs", "does not match", "lost", "wrong"}
+
+	posScore := 0
+	negScore := 0
+	for _, sig := range positiveSignals {
+		if strings.Contains(lower, sig) {
+			posScore++
+		}
+	}
+	for _, sig := range negativeSignals {
+		if strings.Contains(lower, sig) {
+			negScore++
+		}
+	}
+
+	if posScore > 0 || negScore > 0 {
+		equiv := posScore > negScore
+		reason := truncate(text, 150)
+		return &verdict{Equivalent: equiv, Reason: reason}, nil
+	}
+
+	// If we can't determine anything, assume partial equivalence
+	return &verdict{Equivalent: false, Reason: "could not parse verdict: " + truncate(text, 100)}, nil
 }
 
 func truncate(s string, n int) string {

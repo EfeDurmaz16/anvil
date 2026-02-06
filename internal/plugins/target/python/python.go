@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
@@ -55,12 +56,68 @@ func generateModuleWithLLM(ctx context.Context, mod *ir.Module, graph *ir.Semant
 		return b.String()
 	}
 
-	for _, fn := range mod.Functions {
-		impl := generatePythonFunctionWithLLM(ctx, mod, fn, graph, provider)
+	// Generate functions concurrently with worker pool
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	results := make([]string, len(mod.Functions))
+
+	for i, fn := range mod.Functions {
+		wg.Add(1)
+		sem <- struct{}{} // acquire
+		go func(idx int, f *ir.Function) {
+			defer wg.Done()
+			defer func() { <-sem }() // release
+
+			impl := generatePythonFunctionWithLLM(ctx, mod, f, graph, provider)
+
+			mu.Lock()
+			results[idx] = impl
+			mu.Unlock()
+		}(i, fn)
+	}
+	wg.Wait()
+
+	// Write results in order
+	for _, impl := range results {
 		b.WriteString(impl)
 	}
 
 	return b.String()
+}
+
+// stripMarkdownFences removes markdown code fences from LLM output.
+func stripMarkdownFences(s string) string {
+	lines := strings.Split(s, "\n")
+
+	// Find and remove leading fence
+	start := 0
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
+			start = i + 1
+			break
+		}
+	}
+
+	// Find and remove trailing fence
+	end := len(lines)
+	for i := len(lines) - 1; i >= start; i-- {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "```") {
+			end = i
+			break
+		}
+	}
+
+	// If no fences found, return original
+	if start == 0 && end == len(lines) {
+		return s
+	}
+
+	return strings.Join(lines[start:end], "\n")
 }
 
 // generatePythonFunctionWithLLM generates a Python function using LLM.
@@ -112,7 +169,7 @@ Rules:
 		return generatePythonFunctionStub(mod, fn)
 	}
 
-	impl := strings.TrimSpace(resp.Content)
+	impl := strings.TrimSpace(stripMarkdownFences(resp.Content))
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("    def %s(self, _input: UnknownRecord | None = None) -> None:\n", toSnakeIdent(fn.Name)))

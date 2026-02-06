@@ -3,6 +3,7 @@ package java
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
@@ -19,27 +20,47 @@ func (p *Plugin) Language() string { return "java" }
 func (p *Plugin) Generate(ctx context.Context, graph *ir.SemanticGraph, provider llm.Provider) ([]plugins.GeneratedFile, error) {
 	var files []plugins.GeneratedFile
 
-	for _, mod := range graph.Modules {
-		className := toClassName(mod.Name)
+	// Generate modules concurrently with worker pool
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
-		if provider != nil {
-			content, err := generateWithLLM(ctx, provider, mod, className)
-			if err == nil {
-				files = append(files, plugins.GeneratedFile{
-					Path:    fmt.Sprintf("src/main/java/com/anvil/generated/%s.java", className),
-					Content: []byte(content),
-				})
-				continue
+	moduleFiles := make([]plugins.GeneratedFile, len(graph.Modules))
+
+	for i, mod := range graph.Modules {
+		wg.Add(1)
+		sem <- struct{}{} // acquire
+		go func(idx int, m *ir.Module) {
+			defer wg.Done()
+			defer func() { <-sem }() // release
+
+			className := toClassName(m.Name)
+			var content string
+
+			if provider != nil {
+				var err error
+				content, err = generateWithLLM(ctx, provider, m, className)
+				if err != nil {
+					// Fall back to template-based generation
+					content = generateFromTemplate(m, className)
+				}
+			} else {
+				content = generateFromTemplate(m, className)
 			}
-			// Fall back to template-based generation
-		}
 
-		content := generateFromTemplate(mod, className)
-		files = append(files, plugins.GeneratedFile{
-			Path:    fmt.Sprintf("src/main/java/com/anvil/generated/%s.java", className),
-			Content: []byte(content),
-		})
+			mu.Lock()
+			moduleFiles[idx] = plugins.GeneratedFile{
+				Path:    fmt.Sprintf("src/main/java/com/anvil/generated/%s.java", className),
+				Content: []byte(content),
+			}
+			mu.Unlock()
+		}(i, mod)
 	}
+	wg.Wait()
+
+	// Add module files in order
+	files = append(files, moduleFiles...)
 
 	// Generate type classes
 	for _, dt := range graph.DataTypes {
@@ -64,6 +85,83 @@ func (p *Plugin) Scaffold(ctx context.Context, graph *ir.SemanticGraph) ([]plugi
 	}, nil
 }
 
+// stripMarkdownFences removes markdown code fences from LLM output.
+func stripMarkdownFences(s string) string {
+	lines := make([]string, 0)
+	for _, line := range splitLines(s) {
+		lines = append(lines, line)
+	}
+
+	// Find and remove leading fence
+	start := 0
+	for i, line := range lines {
+		trimmed := trimSpace(line)
+		if hasPrefix(trimmed, "```") {
+			start = i + 1
+			break
+		}
+	}
+
+	// Find and remove trailing fence
+	end := len(lines)
+	for i := len(lines) - 1; i >= start; i-- {
+		trimmed := trimSpace(lines[i])
+		if hasPrefix(trimmed, "```") {
+			end = i
+			break
+		}
+	}
+
+	// If no fences found, return original
+	if start == 0 && end == len(lines) {
+		return s
+	}
+
+	return joinLines(lines[start:end])
+}
+
+func splitLines(s string) []string {
+	result := []string{}
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\n' {
+			result = append(result, s[start:i])
+			start = i + 1
+		}
+	}
+	if start < len(s) {
+		result = append(result, s[start:])
+	}
+	return result
+}
+
+func joinLines(lines []string) string {
+	result := ""
+	for i, line := range lines {
+		if i > 0 {
+			result += "\n"
+		}
+		result += line
+	}
+	return result
+}
+
+func trimSpace(s string) string {
+	start := 0
+	end := len(s)
+	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
+		start++
+	}
+	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
+		end--
+	}
+	return s[start:end]
+}
+
+func hasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
 func generateWithLLM(ctx context.Context, provider llm.Provider, mod *ir.Module, className string) (string, error) {
 	prompt := &llm.Prompt{
 		SystemPrompt: "You are a legacy-to-Java migration expert. Convert the given module to a Java Spring Boot service class. Output only the Java source code, no explanation.",
@@ -75,7 +173,7 @@ func generateWithLLM(ctx context.Context, provider llm.Provider, mod *ir.Module,
 	if err != nil {
 		return "", err
 	}
-	return resp.Content, nil
+	return stripMarkdownFences(resp.Content), nil
 }
 
 func functionSummary(mod *ir.Module) string {

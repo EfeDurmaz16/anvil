@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/efebarandurmaz/anvil/internal/llm"
 )
@@ -35,7 +36,7 @@ func New(apiKey, model, baseURL, embedModel string) *Client {
 		model:      model,
 		baseURL:    baseURL,
 		embedModel: embedModel,
-		http:       &http.Client{},
+		http:       &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -51,8 +52,9 @@ func (c *Client) Complete(ctx context.Context, prompt *llm.Prompt, opts *llm.Req
 	}
 
 	body := map[string]any{
-		"model":    c.model,
-		"messages": msgs,
+		"model":      c.model,
+		"messages":   msgs,
+		"max_tokens": 4096, // sensible default for all providers
 	}
 	if opts != nil {
 		if opts.MaxTokens != nil {

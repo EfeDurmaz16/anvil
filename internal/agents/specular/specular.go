@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 
 	"github.com/efebarandurmaz/anvil/internal/agents"
 	"github.com/efebarandurmaz/anvil/internal/ir"
@@ -48,20 +49,51 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 	rulesExtracted := 0
 	failed := 0
 
+	// Collect all functions to process
+	type functionJob struct {
+		mod *ir.Module
+		fn  *ir.Function
+	}
+	var jobs []functionJob
 	for _, mod := range ac.Graph.Modules {
 		for _, fn := range mod.Functions {
-			rules, err := extractRules(ctx, ac.LLM, mod.Language, mod.Name, fn)
-			result.Metrics.LLMCalls++
-
-			if err != nil {
-				result.AddError(fmt.Sprintf("rule extraction for %s.%s: %v", mod.Name, fn.Name, err))
-				failed++
-				continue
-			}
-			ac.Graph.BusinessRules = append(ac.Graph.BusinessRules, rules...)
-			rulesExtracted += len(rules)
+			jobs = append(jobs, functionJob{mod: mod, fn: fn})
 		}
 	}
+
+	// Process functions concurrently with worker pool
+	const maxConcurrent = 5
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	type functionResult struct {
+		rules []*ir.BusinessRule
+		err   error
+	}
+
+	for _, job := range jobs {
+		wg.Add(1)
+		sem <- struct{}{} // acquire
+		go func(j functionJob) {
+			defer wg.Done()
+			defer func() { <-sem }() // release
+
+			rules, err := extractRules(ctx, ac.LLM, j.mod.Language, j.mod.Name, j.fn)
+
+			mu.Lock()
+			result.Metrics.LLMCalls++
+			if err != nil {
+				result.AddError(fmt.Sprintf("rule extraction for %s.%s: %v", j.mod.Name, j.fn.Name, err))
+				failed++
+			} else {
+				ac.Graph.BusinessRules = append(ac.Graph.BusinessRules, rules...)
+				rulesExtracted += len(rules)
+			}
+			mu.Unlock()
+		}(job)
+	}
+	wg.Wait()
 
 	result.Metrics.OutputItems = rulesExtracted
 	result.Metrics.SkippedItems = failed
