@@ -1,9 +1,9 @@
 llm:
   # provider: anthropic, openai, groq, huggingface, ollama, together, deepseek, custom, none
-  provider: none
-  model: ""
+  provider: ollama
+  model: "qwen2.5-coder:7b"
   api_key: ""
-  base_url: ""
+  base_url: "http://localhost:11434/v1"
   temperature: 0.2
   max_tokens: 4096
 

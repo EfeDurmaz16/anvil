@@ -174,15 +174,18 @@ func stripMarkdownFences(s string) string {
 	return strings.Join(lines[start:end], "\n")
 }
 
-// sanitizeLLMOutput strips import/export statements and standalone function
-// wrappers that LLMs commonly include despite instructions not to.
+// sanitizeLLMOutput strips import/export statements, unwraps function/class
+// wrappers, and removes trailing prose that LLMs commonly include.
 func sanitizeLLMOutput(s string) string {
 	lines := strings.Split(s, "\n")
 	var cleaned []string
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// Skip import statements
-		if strings.HasPrefix(trimmed, "import ") {
+		// Skip import/require statements
+		if strings.HasPrefix(trimmed, "import ") || strings.HasPrefix(trimmed, "import{") {
+			continue
+		}
+		if strings.Contains(trimmed, "require(") && (strings.HasPrefix(trimmed, "const ") || strings.HasPrefix(trimmed, "let ") || strings.HasPrefix(trimmed, "var ")) {
 			continue
 		}
 		// Skip export statements
@@ -190,15 +193,54 @@ func sanitizeLLMOutput(s string) string {
 			continue
 		}
 		// Strip trailing prose (non-code text after the implementation)
-		if strings.HasPrefix(trimmed, "This ") || strings.HasPrefix(trimmed, "Note:") || strings.HasPrefix(trimmed, "The above") {
+		if strings.HasPrefix(trimmed, "This ") || strings.HasPrefix(trimmed, "Note:") || strings.HasPrefix(trimmed, "The above") || strings.HasPrefix(trimmed, "Here ") {
 			break
 		}
 		cleaned = append(cleaned, line)
 	}
-	// Trim trailing empty lines
+
+	// Trim leading/trailing empty lines
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
+		cleaned = cleaned[1:]
+	}
 	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
 		cleaned = cleaned[:len(cleaned)-1]
 	}
+
+	// Unwrap function/class wrappers: if first line is a function/class
+	// declaration and last line is its closing brace, extract only the body.
+	if len(cleaned) >= 3 {
+		first := strings.TrimSpace(cleaned[0])
+		last := strings.TrimSpace(cleaned[len(cleaned)-1])
+		isFuncDecl := (strings.HasPrefix(first, "function ") ||
+			strings.HasPrefix(first, "async function ") ||
+			strings.HasPrefix(first, "class ")) &&
+			strings.HasSuffix(first, "{")
+		if isFuncDecl && last == "}" {
+			// Extract body, removing one level of indentation
+			body := cleaned[1 : len(cleaned)-1]
+			var unwrapped []string
+			for _, line := range body {
+				// Remove one level of indentation (2 spaces or 1 tab)
+				if strings.HasPrefix(line, "\t") {
+					line = line[1:]
+				} else if strings.HasPrefix(line, "  ") {
+					line = line[2:]
+				}
+				unwrapped = append(unwrapped, line)
+			}
+			cleaned = unwrapped
+		}
+	}
+
+	// Trim again after unwrapping
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
+		cleaned = cleaned[1:]
+	}
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+
 	return strings.Join(cleaned, "\n")
 }
 
@@ -215,6 +257,21 @@ func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext str
 		}
 	}
 
+	// Check for Judge feedback from previous retry
+	feedbackHint := ""
+	if fb, ok := ctx.Value("judge_feedback").(string); ok && fb != "" {
+		feedbackHint = fmt.Sprintf(`
+
+IMPORTANT - Previous attempt had these errors. Fix them:
+%s
+
+Common mistakes to avoid:
+- Do NOT reference variables without "this." prefix (use this.wsNum1 not wsNum1)
+- Do NOT use import/export statements
+- Do NOT define standalone functions inside the method body
+- CALL other methods using this.methodName() not performMethodName()`, fb)
+	}
+
 	prompt := &llm.Prompt{
 		SystemPrompt: fmt.Sprintf(`You are a %s to TypeScript migration expert.
 
@@ -225,9 +282,11 @@ CRITICAL OUTPUT FORMAT RULES:
 - Do NOT wrap code in markdown fences
 - The code will be placed inside a class method, so write only the body
 - Use Decimal.js as: new Decimal(value).plus(other).toNumber() — assume it is already imported
+- Reference class properties with "this." prefix (e.g., this.wsNum1)
+- Call other methods with "this." prefix (e.g., this.addNumbers())
 
 Example of CORRECT output:
-const result = new Decimal(num1).plus(new Decimal(num2));
+const result = new Decimal(this.wsNum1).plus(new Decimal(this.wsNum2));
 console.log("SUM: " + result.toNumber());
 return result.toNumber();
 
@@ -241,7 +300,7 @@ Rules:
 1. Preserve the exact business logic from the original %s code
 2. Use modern TypeScript (async/await, optional chaining)
 3. Add brief inline comments for business logic
-4. Handle edge cases appropriately`, lang, lang),
+4. Handle edge cases appropriately%s`, lang, lang, feedbackHint),
 		Messages: []llm.Message{
 			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to TypeScript method body:\n\n%s\n\nReturn ONLY the method body lines, no imports or function wrappers.", lang, fnContext)},
 		},

@@ -96,7 +96,11 @@ func (j *Judge) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Agent
 			defer wg.Done()
 			defer func() { <-sem }() // release
 
-			ok, reason, err := verifyFunction(ctx, ac.LLM, sourceLang, targetLang, j.mod.Name, j.fn.Name, j.fn.Body, generatedText)
+			// Extract only the relevant function's generated code to avoid
+			// overwhelming smaller LLMs with the entire output.
+			fnSnippet := extractFunctionSnippet(generatedText, j.fn.Name)
+
+			ok, reason, err := verifyFunction(ctx, ac.LLM, sourceLang, targetLang, j.mod.Name, j.fn.Name, j.fn.Body, fnSnippet)
 
 			mu.Lock()
 			result.Metrics.LLMCalls++
@@ -271,6 +275,85 @@ func parseVerdict(text string) (*verdict, error) {
 
 	// If we can't determine anything, assume partial equivalence
 	return &verdict{Equivalent: false, Reason: "could not parse verdict: " + truncate(text, 100)}, nil
+}
+
+// extractFunctionSnippet finds the generated code for a specific function
+// by looking for the method DEFINITION signature (not just any name reference).
+// This prevents matching function names in JSDoc comments or method calls.
+func extractFunctionSnippet(generatedText, fnName string) string {
+	camelName := toCamelCase(fnName)
+
+	// Look for method definition pattern: "  methodName(" at start of line
+	defPatterns := []string{
+		camelName + "(",            // methodName(
+		"async " + camelName + "(", // async methodName(
+	}
+
+	lines := strings.Split(generatedText, "\n")
+	for _, pattern := range defPatterns {
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			// Must be a method definition, not a call or comment
+			if !strings.HasPrefix(trimmed, pattern) {
+				continue
+			}
+			// Skip if inside a comment
+			if strings.Contains(line, "//") || strings.Contains(line, "*") {
+				rawBefore := strings.TrimSpace(strings.Split(line, pattern)[0])
+				if strings.HasPrefix(rawBefore, "//") || strings.HasPrefix(rawBefore, "*") {
+					continue
+				}
+			}
+
+			// Found the definition - extract the full method body
+			start := i
+			// Include JSDoc above if present
+			for s := i - 1; s >= 0 && s >= i-6; s-- {
+				st := strings.TrimSpace(lines[s])
+				if st == "" || strings.HasPrefix(st, "*") || strings.HasPrefix(st, "/**") || strings.HasPrefix(st, "*/") {
+					start = s
+				} else {
+					break
+				}
+			}
+
+			// Find closing brace by tracking depth
+			end := i + 1
+			braceDepth := 0
+			for j := i; j < len(lines) && j < i+100; j++ {
+				braceDepth += strings.Count(lines[j], "{") - strings.Count(lines[j], "}")
+				if braceDepth <= 0 && j > i {
+					end = j + 1
+					break
+				}
+			}
+			return strings.Join(lines[start:end], "\n")
+		}
+	}
+
+	// Fallback: return truncated full text
+	if len(generatedText) > 2000 {
+		return generatedText[:2000] + "\n…(truncated)…"
+	}
+	return generatedText
+}
+
+func toCamelCase(name string) string {
+	parts := strings.FieldsFunc(name, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' ' || r == '.'
+	})
+	var out string
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		if i == 0 {
+			out += strings.ToLower(p)
+		} else {
+			out += strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
+		}
+	}
+	return out
 }
 
 func truncate(s string, n int) string {

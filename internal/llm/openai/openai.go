@@ -36,7 +36,7 @@ func New(apiKey, model, baseURL, embedModel string) *Client {
 		model:      model,
 		baseURL:    baseURL,
 		embedModel: embedModel,
-		http:       &http.Client{Timeout: 120 * time.Second},
+		http:       &http.Client{Timeout: 300 * time.Second},
 	}
 }
 

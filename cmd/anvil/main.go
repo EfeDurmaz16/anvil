@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/efebarandurmaz/anvil/internal/agents"
@@ -294,12 +295,19 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		fmt.Printf("\n=== Architect: Generating %s (attempt %d/%d) ===\n", targetLang, attempt+1, maxRetries+1)
 		start = time.Now()
+
+		// Pass Judge feedback to Architect on retries
+		archParams := map[string]string{"target": targetLang}
+		if attempt > 0 && len(allErrors) > 0 {
+			archParams["judge_feedback"] = strings.Join(allErrors, "\n")
+		}
+
 		arch := architect.New()
 		archResult, err := arch.Run(ctx, &agents.AgentContext{
 			Graph:    cartResult.Graph,
 			LLM:      provider,
 			Registry: registry,
-			Params:   map[string]string{"target": targetLang},
+			Params:   archParams,
 		})
 		if err != nil {
 			return fmt.Errorf("architect: %w", err)

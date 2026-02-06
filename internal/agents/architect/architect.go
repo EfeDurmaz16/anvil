@@ -52,7 +52,13 @@ func (a *Architect) Run(ctx context.Context, ac *agents.AgentContext) (*agents.A
 		return result, fmt.Errorf("scaffolding: %w", err)
 	}
 
-	genFiles, err := target.Generate(ctx, ac.Graph, ac.LLM)
+	// Pass judge feedback to the target plugin via context
+	genCtx := ctx
+	if feedback := ac.Params["judge_feedback"]; feedback != "" {
+		genCtx = context.WithValue(ctx, "judge_feedback", feedback)
+	}
+
+	genFiles, err := target.Generate(genCtx, ac.Graph, ac.LLM)
 	if err != nil {
 		result.Status = agents.StatusFailed
 		result.AddError(fmt.Sprintf("generating: %v", err))
