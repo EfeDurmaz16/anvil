@@ -21,7 +21,7 @@ func (p *Plugin) Generate(ctx context.Context, graph *ir.SemanticGraph, provider
 	var files []plugins.GeneratedFile
 
 	// Generate modules concurrently with worker pool
-	const maxConcurrent = 5
+	const maxConcurrent = 1
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -85,8 +85,40 @@ func (p *Plugin) Scaffold(ctx context.Context, graph *ir.SemanticGraph) ([]plugi
 	}, nil
 }
 
+// stripThinkingTags removes <think>...</think> blocks from LLM output (e.g. qwen3).
+func stripThinkingTags(s string) string {
+	for {
+		start := -1
+		tag := "<think>"
+		for i := 0; i <= len(s)-len(tag); i++ {
+			if s[i:i+len(tag)] == tag {
+				start = i
+				break
+			}
+		}
+		if start == -1 {
+			break
+		}
+		endTag := "</think>"
+		end := -1
+		for i := start; i <= len(s)-len(endTag); i++ {
+			if s[i:i+len(endTag)] == endTag {
+				end = i
+				break
+			}
+		}
+		if end == -1 {
+			s = trimSpace(s[:start])
+			break
+		}
+		s = s[:start] + s[end+len(endTag):]
+	}
+	return trimSpace(s)
+}
+
 // stripMarkdownFences removes markdown code fences from LLM output.
 func stripMarkdownFences(s string) string {
+	s = stripThinkingTags(s)
 	lines := make([]string, 0)
 	for _, line := range splitLines(s) {
 		lines = append(lines, line)

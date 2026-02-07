@@ -24,6 +24,40 @@ type LLMConfig struct {
 	BaseURL     string  `mapstructure:"base_url"`
 	Temperature float64 `mapstructure:"temperature"`
 	MaxTokens   int     `mapstructure:"max_tokens"`
+
+	// Per-agent overrides. Keys are agent names (e.g. "judge", "specular", "architect").
+	// Each override inherits unset fields from the top-level LLM config.
+	Agents map[string]LLMAgentOverride `mapstructure:"agents"`
+}
+
+// LLMAgentOverride allows per-agent LLM provider configuration.
+type LLMAgentOverride struct {
+	Provider string `mapstructure:"provider"`
+	Model    string `mapstructure:"model"`
+	APIKey   string `mapstructure:"api_key"`
+	BaseURL  string `mapstructure:"base_url"`
+}
+
+// ResolveForAgent returns an LLMConfig with agent-specific overrides applied.
+func (c LLMConfig) ResolveForAgent(agentName string) LLMConfig {
+	override, ok := c.Agents[agentName]
+	if !ok {
+		return c
+	}
+	resolved := c
+	if override.Provider != "" {
+		resolved.Provider = override.Provider
+	}
+	if override.Model != "" {
+		resolved.Model = override.Model
+	}
+	if override.APIKey != "" {
+		resolved.APIKey = override.APIKey
+	}
+	if override.BaseURL != "" {
+		resolved.BaseURL = override.BaseURL
+	}
+	return resolved
 }
 
 type GraphConfig struct {

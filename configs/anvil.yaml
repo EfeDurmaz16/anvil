@@ -1,11 +1,18 @@
 llm:
-  # provider: anthropic, openai, groq, huggingface, ollama, together, deepseek, custom, none
-  provider: ollama
-  model: "qwen2.5-coder:7b"
-  api_key: ""
-  base_url: "http://localhost:11434/v1"
+  # Default: Groq Llama 4 Scout (good TPM limits, no thinking tags)
+  provider: groq
+  model: "meta-llama/llama-4-scout-17b-16e-instruct"
+  # api_key: set via ANVIL_LLM_API_KEY environment variable
+  base_url: "https://api.groq.com/openai/v1"
   temperature: 0.2
   max_tokens: 4096
+
+  # Per-agent overrides: Judge uses local Ollama to save cloud tokens.
+  agents:
+    judge:
+      provider: ollama
+      model: "qwen2.5-coder:7b"
+      base_url: "http://localhost:11434/v1"
 
 graph:
   uri: bolt://localhost:7687

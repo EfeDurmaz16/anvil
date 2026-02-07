@@ -3,6 +3,7 @@ package typescript
 import (
 	"context"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -69,7 +70,7 @@ func generateServiceWithLLM(ctx context.Context, mod *ir.Module, svcName string,
 	b.WriteString(fmt.Sprintf("export class %s {\n", svcName))
 
 	// Generate functions concurrently with worker pool
-	const maxConcurrent = 5
+	const maxConcurrent = 1
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -139,11 +140,64 @@ func buildFunctionContext(mod *ir.Module, fn *ir.Function, graph *ir.SemanticGra
 		ctx.WriteString(fmt.Sprintf("Returns: %s\n", describeType(fn.Returns)))
 	}
 
+	// Include relevant data types referenced in the function body.
+	// This gives the LLM knowledge of copybook structures (field names, types).
+	if fn.Body != "" && len(graph.DataTypes) > 0 {
+		bodyUpper := strings.ToUpper(fn.Body)
+		var relevant []*ir.DataType
+		for _, dt := range graph.DataTypes {
+			if dt == nil || dt.Kind != ir.TypeStruct || len(dt.Fields) == 0 {
+				continue
+			}
+			// Match if the data type name appears in the function body
+			if strings.Contains(bodyUpper, strings.ToUpper(dt.Name)) {
+				relevant = append(relevant, dt)
+			}
+		}
+		if len(relevant) > 0 {
+			// Limit to 8 most relevant types to avoid overwhelming small models
+			if len(relevant) > 8 {
+				relevant = relevant[:8]
+			}
+			ctx.WriteString("\nData Structures referenced in this function:\n")
+			for _, dt := range relevant {
+				ctx.WriteString(fmt.Sprintf("  %s:\n", dt.Name))
+				for _, f := range dt.Fields {
+					if f == nil {
+						continue
+					}
+					ctx.WriteString(fmt.Sprintf("    - %s: %s\n", f.Name, describeType(f)))
+				}
+			}
+		}
+	}
+
 	return ctx.String()
+}
+
+// stripThinkingTags removes <think>...</think> blocks from LLM output (e.g. qwen3).
+func stripThinkingTags(s string) string {
+	for {
+		start := strings.Index(s, "<think>")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(s, "</think>")
+		if end == -1 {
+			// Unclosed tag: remove from <think> to end
+			s = strings.TrimSpace(s[:start])
+			break
+		}
+		s = s[:start] + s[end+len("</think>"):]
+	}
+	return strings.TrimSpace(s)
 }
 
 // stripMarkdownFences removes markdown code fences from LLM output.
 func stripMarkdownFences(s string) string {
+	// First strip thinking tags
+	s = stripThinkingTags(s)
+
 	lines := strings.Split(s, "\n")
 
 	// Find and remove leading fence
@@ -309,6 +363,7 @@ Rules:
 	resp, err := provider.Complete(ctx, prompt, nil)
 	if err != nil {
 		// Fallback to stub on error
+		fmt.Fprintf(os.Stderr, "  [architect] LLM error for %s: %v\n", fn.Name, err)
 		return generateFunctionStub(fn)
 	}
 

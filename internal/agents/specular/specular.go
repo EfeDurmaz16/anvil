@@ -62,7 +62,7 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 	}
 
 	// Process functions concurrently with worker pool
-	const maxConcurrent = 5
+	const maxConcurrent = 1
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -125,11 +125,12 @@ func extractRules(ctx context.Context, provider llm.Provider, sourceLang string,
 		return nil, err
 	}
 
+	content := llm.StripThinkingTags(resp.Content)
 	var rules []*ir.BusinessRule
-	if err := json.Unmarshal([]byte(resp.Content), &rules); err != nil {
+	if err := json.Unmarshal([]byte(content), &rules); err != nil {
 		return []*ir.BusinessRule{{
 			ID:          fmt.Sprintf("%s.%s.rule1", module, fn.Name),
-			Description: resp.Content,
+			Description: content,
 			SourceRef:   fmt.Sprintf("%s.%s", module, fn.Name),
 			Confidence:  0.5,
 		}}, nil

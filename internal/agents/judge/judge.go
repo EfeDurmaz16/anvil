@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -67,7 +68,6 @@ func (j *Judge) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Agent
 		result.AddWarning("judge: generated code input was empty")
 	}
 
-	score := 1.0
 	verified := 0
 	failed := 0
 
@@ -84,11 +84,12 @@ func (j *Judge) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Agent
 	}
 
 	// Verify functions concurrently with worker pool
-	const maxConcurrent = 5
+	const maxConcurrent = 1
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
+	completed := 0
 	for _, job := range jobs {
 		wg.Add(1)
 		sem <- struct{}{} // acquire
@@ -103,25 +104,30 @@ func (j *Judge) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Agent
 			ok, reason, err := verifyFunction(ctx, ac.LLM, sourceLang, targetLang, j.mod.Name, j.fn.Name, j.fn.Body, fnSnippet)
 
 			mu.Lock()
+			completed++
 			result.Metrics.LLMCalls++
 			if err != nil {
 				result.AddError(fmt.Sprintf("verify %s.%s: %v", j.mod.Name, j.fn.Name, err))
-				score -= 0.1
 				failed++
 			} else if !ok {
 				result.AddError(fmt.Sprintf("%s.%s: %s", j.mod.Name, j.fn.Name, reason))
-				score -= 0.2
 				failed++
 			} else {
 				verified++
+			}
+			// Print progress for large batches
+			if len(jobs) > 10 {
+				fmt.Fprintf(os.Stderr, "  [judge] %d/%d verified (%.0f%% pass)\n", completed, len(jobs), float64(verified)/float64(completed)*100)
 			}
 			mu.Unlock()
 		}(job)
 	}
 	wg.Wait()
 
-	if score < 0 {
-		score = 0
+	// Percentage-based scoring: ratio of verified functions to total
+	score := 0.0
+	if len(jobs) > 0 {
+		score = float64(verified) / float64(len(jobs))
 	}
 
 	result.Score = score
@@ -169,7 +175,7 @@ func verifyFunction(ctx context.Context, provider llm.Provider, sourceLang, targ
 		return false, "", err
 	}
 
-	text := strings.TrimSpace(resp.Content)
+	text := strings.TrimSpace(llm.StripThinkingTags(resp.Content))
 	if text == "" {
 		return false, "empty response", nil
 	}

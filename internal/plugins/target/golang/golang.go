@@ -56,7 +56,7 @@ func generateModuleWithLLM(ctx context.Context, mod *ir.Module, graph *ir.Semant
 	b.WriteString(fmt.Sprintf("type %sService struct{}\n\n", toPascalCase(mod.Name)))
 
 	// Generate functions concurrently with worker pool
-	const maxConcurrent = 5
+	const maxConcurrent = 1
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -87,8 +87,26 @@ func generateModuleWithLLM(ctx context.Context, mod *ir.Module, graph *ir.Semant
 	return b.String()
 }
 
+// stripThinkingTags removes <think>...</think> blocks from LLM output (e.g. qwen3).
+func stripThinkingTags(s string) string {
+	for {
+		start := strings.Index(s, "<think>")
+		if start == -1 {
+			break
+		}
+		end := strings.Index(s, "</think>")
+		if end == -1 {
+			s = strings.TrimSpace(s[:start])
+			break
+		}
+		s = s[:start] + s[end+len("</think>"):]
+	}
+	return strings.TrimSpace(s)
+}
+
 // stripMarkdownFences removes markdown code fences from LLM output.
 func stripMarkdownFences(s string) string {
+	s = stripThinkingTags(s)
 	lines := strings.Split(s, "\n")
 
 	// Find and remove leading fence

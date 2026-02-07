@@ -21,8 +21,8 @@ type RetryConfig struct {
 // DefaultRetryConfig returns a sensible default configuration.
 func DefaultRetryConfig() *RetryConfig {
 	return &RetryConfig{
-		MaxRetries: 3,
-		RetryDelay: 1 * time.Second,
+		MaxRetries: 8,
+		RetryDelay: 2 * time.Second,
 		MaxDelay:   30 * time.Second,
 		Timeout:    2 * time.Minute,
 	}
@@ -165,8 +165,12 @@ func (r *RetryProvider) isRetryable(err error) bool {
 	// Check for specific HTTP status codes in error message
 	errStr := err.Error()
 
-	// Rate limiting (429) - retryable
+	// Rate limiting (429) - retryable, UNLESS it's a daily token limit (TPD)
 	if strings.Contains(errStr, "429") || strings.Contains(errStr, "Too Many Requests") {
+		// Daily token limits (TPD) won't reset with retries - don't waste time
+		if strings.Contains(errStr, "tokens per day") || strings.Contains(errStr, "TPD") {
+			return false
+		}
 		return true
 	}
 

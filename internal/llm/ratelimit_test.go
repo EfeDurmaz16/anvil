@@ -35,14 +35,14 @@ func (m *mockProvider) Embed(ctx context.Context, texts []string) ([][]float32, 
 
 func TestDefaultRateLimitConfig(t *testing.T) {
 	cfg := DefaultRateLimitConfig()
-	if cfg.RequestsPerMinute != 60 {
-		t.Fatalf("expected 60 RPM, got %d", cfg.RequestsPerMinute)
+	if cfg.RequestsPerMinute != 25 {
+		t.Fatalf("expected 25 RPM, got %d", cfg.RequestsPerMinute)
 	}
-	if cfg.TokensPerMinute != 100000 {
-		t.Fatalf("expected 100000 TPM, got %d", cfg.TokensPerMinute)
+	if cfg.TokensPerMinute != 25000 {
+		t.Fatalf("expected 25000 TPM, got %d", cfg.TokensPerMinute)
 	}
-	if cfg.BurstSize != 10 {
-		t.Fatalf("expected burst 10, got %d", cfg.BurstSize)
+	if cfg.BurstSize != 3 {
+		t.Fatalf("expected burst 3, got %d", cfg.BurstSize)
 	}
 }
 
@@ -216,10 +216,10 @@ func TestRateLimitProvider_NilConfig(t *testing.T) {
 
 	// Should use defaults
 	stats := rl.Stats()
-	if rl.config.RequestsPerMinute != 60 {
-		t.Fatalf("expected default 60 RPM, got %d", rl.config.RequestsPerMinute)
+	if rl.config.RequestsPerMinute != 25 {
+		t.Fatalf("expected default 25 RPM, got %d", rl.config.RequestsPerMinute)
 	}
-	if stats.RemainingRequests != 10 { // Default burst size
-		t.Fatalf("expected 10 remaining requests, got %d", stats.RemainingRequests)
+	if stats.RemainingRequests != 3 { // Default burst size
+		t.Fatalf("expected 3 remaining requests, got %d", stats.RemainingRequests)
 	}
 }

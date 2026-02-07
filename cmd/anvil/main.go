@@ -230,23 +230,64 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		})
 	}
 
-	provider, err := factory.Create(llm.ProviderConfig{
-		Provider: cfg.LLM.Provider,
-		APIKey:   cfg.LLM.APIKey,
-		Model:    cfg.LLM.Model,
-		BaseURL:  cfg.LLM.BaseURL,
-	})
+	// Helper to create a provider from an LLM config (with rate limiting).
+	makeProvider := func(lcfg config.LLMConfig, label string) (llm.Provider, error) {
+		p, err := factory.Create(llm.ProviderConfig{
+			Provider: lcfg.Provider,
+			APIKey:   lcfg.APIKey,
+			Model:    lcfg.Model,
+			BaseURL:  lcfg.BaseURL,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("creating LLM provider for %s: %w", label, err)
+		}
+		if p != nil {
+			p = llm.WithRateLimit(p, llm.DefaultRateLimitConfig())
+		}
+		return p, nil
+	}
+
+	// Default provider (used by agents without overrides)
+	provider, err := makeProvider(cfg.LLM, "default")
 	if err != nil {
 		return fmt.Errorf("creating LLM provider: %w", err)
+	}
+
+	// Per-agent providers (resolved from config overrides)
+	specularProvider := provider
+	architectProvider := provider
+	judgeProvider := provider
+
+	if len(cfg.LLM.Agents) > 0 {
+		for agentName := range cfg.LLM.Agents {
+			resolved := cfg.LLM.ResolveForAgent(agentName)
+			agentProv, err := makeProvider(resolved, agentName)
+			if err != nil {
+				return fmt.Errorf("creating LLM provider for agent %s: %w", agentName, err)
+			}
+			switch agentName {
+			case "specular":
+				specularProvider = agentProv
+			case "architect":
+				architectProvider = agentProv
+			case "judge":
+				judgeProvider = agentProv
+			}
+		}
 	}
 
 	if provider == nil {
 		m.LLMMode = "passthrough"
 		fmt.Println("Running without LLM (template-only mode)")
 	} else {
-		provider = llm.WithRateLimit(provider, llm.DefaultRateLimitConfig())
 		m.LLMMode = "llm:" + provider.Name()
 		fmt.Printf("Using LLM provider: %s\n", provider.Name())
+		if len(cfg.LLM.Agents) > 0 {
+			for name := range cfg.LLM.Agents {
+				resolved := cfg.LLM.ResolveForAgent(name)
+				fmt.Printf("  Agent %-12s → %s/%s\n", name, resolved.Provider, resolved.Model)
+			}
+		}
 	}
 
 	ctx := context.Background()
@@ -272,7 +313,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 	spec := specular.New()
 	specResult, err := spec.Run(ctx, &agents.AgentContext{
 		Graph:    cartResult.Graph,
-		LLM:      provider,
+		LLM:      specularProvider,
 		Registry: registry,
 	})
 	if err != nil {
@@ -305,7 +346,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		arch := architect.New()
 		archResult, err := arch.Run(ctx, &agents.AgentContext{
 			Graph:    cartResult.Graph,
-			LLM:      provider,
+			LLM:      architectProvider,
 			Registry: registry,
 			Params:   archParams,
 		})
@@ -325,7 +366,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		genFilesJSON, _ := json.Marshal(archResult.GeneratedFiles)
 		judgeResult, err := j.Run(ctx, &agents.AgentContext{
 			Graph: cartResult.Graph,
-			LLM:   provider,
+			LLM:   judgeProvider,
 			Params: map[string]string{
 				"source":          sourceLang,
 				"target":          targetLang,
@@ -341,12 +382,16 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		}
 		m.AddAgent("judge", time.Since(start), judgeMode, len(judgeResult.Errors))
 
-		finalFiles = archResult.GeneratedFiles
-		finalScore = judgeResult.Score
-		allErrors = judgeResult.Errors
 		fmt.Printf("  Score: %.2f [%s]\n", judgeResult.Score, judgeMode)
 
-		if judgeResult.Score >= 0.8 {
+		// Keep best: only update if this attempt improved the score
+		if judgeResult.Score > finalScore || finalFiles == nil {
+			finalFiles = archResult.GeneratedFiles
+			finalScore = judgeResult.Score
+		}
+		allErrors = judgeResult.Errors
+
+		if finalScore >= 0.8 {
 			break
 		}
 	}

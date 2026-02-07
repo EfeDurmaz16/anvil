@@ -19,9 +19,9 @@ type RateLimitConfig struct {
 // DefaultRateLimitConfig returns sensible defaults for most providers.
 func DefaultRateLimitConfig() *RateLimitConfig {
 	return &RateLimitConfig{
-		RequestsPerMinute: 60,  // 1 request per second on average
-		TokensPerMinute:   100000,
-		BurstSize:         10,
+		RequestsPerMinute: 25,    // conservative for free-tier cloud APIs (Groq etc.)
+		TokensPerMinute:   25000, // Groq free tier: 6K-30K TPM depending on model
+		BurstSize:         3,
 	}
 }
 

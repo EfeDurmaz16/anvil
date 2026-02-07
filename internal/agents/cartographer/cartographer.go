@@ -117,6 +117,11 @@ func loadSourceFiles(path string, src plugins.SourcePlugin) ([]plugins.SourceFil
 			return nil, err
 		}
 		files = append(files, plugins.SourceFile{Path: path, Content: data})
+
+		// Auto-discover copybook files for single-file input.
+		// Search sibling directories (e.g., ../cpy/) and same directory for .cpy files.
+		cpyFiles := discoverCopybooks(path)
+		files = append(files, cpyFiles...)
 		return files, nil
 	}
 
@@ -157,6 +162,51 @@ func extensionSet(src plugins.SourcePlugin) map[string]bool {
 		out[ext] = true
 	}
 	return out
+}
+
+// discoverCopybooks searches for .cpy files near a single-file input.
+// It checks the same directory and common sibling directories (../cpy/, ../copy/).
+func discoverCopybooks(sourcePath string) []plugins.SourceFile {
+	dir := filepath.Dir(sourcePath)
+	parent := filepath.Dir(dir)
+
+	searchDirs := []string{
+		dir,                          // same directory
+		filepath.Join(parent, "cpy"), // sibling cpy/ (CardDemo layout)
+		filepath.Join(parent, "copy"),
+		filepath.Join(dir, "cpy"),
+		filepath.Join(dir, "copy"),
+	}
+
+	seen := make(map[string]bool)
+	var result []plugins.SourceFile
+
+	for _, d := range searchDirs {
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			ext := strings.ToLower(filepath.Ext(e.Name()))
+			if ext != ".cpy" {
+				continue
+			}
+			full := filepath.Join(d, e.Name())
+			if seen[full] {
+				continue
+			}
+			seen[full] = true
+			data, err := os.ReadFile(full)
+			if err != nil {
+				continue
+			}
+			result = append(result, plugins.SourceFile{Path: full, Content: data})
+		}
+	}
+	return result
 }
 
 // buildDependencyMap extracts dependency relationships from the graph.
