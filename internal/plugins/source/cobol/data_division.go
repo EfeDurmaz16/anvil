@@ -17,9 +17,18 @@ var (
 	redefines   = regexp.MustCompile(`(?i)\bREDEFINES\s+([\w-]+)`)
 )
 
+// stackEntry holds a level number and its associated DataType for the hierarchy stack.
+type stackEntry struct {
+	level int
+	dt    *ir.DataType
+}
+
 func parseDataDivision(lines []string) []*ir.DataType {
-	var types []*ir.DataType
+	var topLevel []*ir.DataType
 	inData := false
+
+	// stack holds (level, *DataType) pairs for building the hierarchy
+	var stack []stackEntry
 
 	for _, line := range lines {
 		// Handle fixed-format comment
@@ -72,21 +81,29 @@ func parseDataDivision(lines []string) []*ir.DataType {
 			Metadata: map[string]string{"level": strconv.Itoa(level)},
 		}
 
-		// 88-level = boolean condition
+		// 88-level = boolean condition — always child of the immediately preceding item
 		if level == 88 {
 			dt.Kind = ir.TypeBoolean
 			if m := valueClause.FindStringSubmatch(upper); len(m) > 1 {
 				dt.Metadata["values"] = strings.TrimSpace(m[1])
 			}
-			types = append(types, dt)
+			if len(stack) > 0 {
+				parent := stack[len(stack)-1].dt
+				parent.Fields = append(parent.Fields, dt)
+			} else {
+				topLevel = append(topLevel, dt)
+			}
+			// 88-level items are not pushed onto the stack
 			continue
 		}
 
-		// 66-level RENAMES — track but type unknown
+		// 66-level RENAMES — track but type unknown; treat as top-level sibling
 		if level == 66 {
 			dt.Kind = ir.TypeUnknown
 			dt.Metadata["renames"] = "true"
-			types = append(types, dt)
+			// Pop stack fully and add as top-level (or sibling of last 01)
+			stack = nil
+			topLevel = append(topLevel, dt)
 			continue
 		}
 
@@ -139,19 +156,40 @@ func parseDataDivision(lines []string) []*ir.DataType {
 			dt.Metadata["value"] = strings.TrimSpace(m[1])
 		}
 
-		// Group items (no PIC) at common levels
+		// Group items (no PIC) are structs
 		if dt.Kind == "" || dt.Kind == ir.TypeUnknown {
-			if level == 1 || level == 5 || level == 01 || level == 05 {
-				dt.Kind = ir.TypeStruct
-			} else if dt.Kind == "" {
-				dt.Kind = ir.TypeStruct // group items without PIC are structs
-			}
+			dt.Kind = ir.TypeStruct
 		}
 
-		types = append(types, dt)
+		// Stack-based hierarchy:
+		// Pop all entries with level >= current level
+		for len(stack) > 0 && stack[len(stack)-1].level >= level {
+			stack = stack[:len(stack)-1]
+		}
+
+		if level == 1 || level == 77 {
+			// 01-level and 77-level items are always top-level standalone roots
+			stack = nil
+			topLevel = append(topLevel, dt)
+			stack = append(stack, stackEntry{level: level, dt: dt})
+		} else {
+			if len(stack) > 0 {
+				// Attach as child of the current top of stack
+				parent := stack[len(stack)-1].dt
+				parent.Fields = append(parent.Fields, dt)
+				// Upgrade parent to struct if it had a concrete type (group item with children)
+				if parent.Kind != ir.TypeStruct && parent.Kind != ir.TypeArray {
+					parent.Kind = ir.TypeStruct
+				}
+			} else {
+				// No parent found; treat as top-level
+				topLevel = append(topLevel, dt)
+			}
+			stack = append(stack, stackEntry{level: level, dt: dt})
+		}
 	}
 
-	return types
+	return topLevel
 }
 
 func picToType(pic string) (ir.TypeKind, int, int) {

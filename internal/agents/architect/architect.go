@@ -8,6 +8,18 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 )
 
+// contextKey is an unexported type for context keys in this package,
+// preventing collisions with keys from other packages.
+type contextKey string
+
+const judgeFeedbackKey contextKey = "judge_feedback"
+
+// JudgeFeedbackFromContext extracts judge feedback stored in ctx by the architect.
+func JudgeFeedbackFromContext(ctx context.Context) string {
+	v, _ := ctx.Value(judgeFeedbackKey).(string)
+	return v
+}
+
 // Architect generates target language code from the enriched IR.
 type Architect struct{}
 
@@ -55,7 +67,7 @@ func (a *Architect) Run(ctx context.Context, ac *agents.AgentContext) (*agents.A
 	// Pass judge feedback to the target plugin via context
 	genCtx := ctx
 	if feedback := ac.Params["judge_feedback"]; feedback != "" {
-		genCtx = context.WithValue(ctx, "judge_feedback", feedback)
+		genCtx = context.WithValue(ctx, judgeFeedbackKey, feedback)
 	}
 
 	genFiles, err := target.Generate(genCtx, ac.Graph, ac.LLM)

@@ -420,6 +420,364 @@ sub process_hash {
 	}
 }
 
+func TestStripPOD(t *testing.T) {
+	src := []byte(`#!/usr/bin/perl
+package DocModule;
+
+=head1 NAME
+
+DocModule - A module with embedded POD documentation.
+
+=head1 SYNOPSIS
+
+    my $obj = DocModule->new();
+    $obj->process();
+
+=head1 DESCRIPTION
+
+This module does something useful.
+
+=cut
+
+sub new {
+    my ($class) = @_;
+    return bless {}, $class;
+}
+
+=head2 process
+
+Processes the object.
+
+=cut
+
+sub process {
+    my ($self) = @_;
+    return 1;
+}
+
+=pod
+
+=encoding utf8
+
+Some more docs.
+
+=cut
+
+sub helper {
+    my ($self, $x) = @_;
+    return $x * 2;
+}
+`)
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "doc.pm", Content: src},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mod := graph.Modules[0]
+	if mod.Name != "DocModule" {
+		t.Errorf("expected DocModule, got %s", mod.Name)
+	}
+
+	// Should parse exactly 3 functions (new, process, helper), not POD content
+	if len(mod.Functions) < 3 {
+		t.Errorf("expected at least 3 functions, got %d", len(mod.Functions))
+	}
+
+	// Verify POD content did not become a spurious function
+	for _, fn := range mod.Functions {
+		if fn.Name == "NAME" || fn.Name == "SYNOPSIS" || fn.Name == "DESCRIPTION" {
+			t.Errorf("POD directive leaked into functions as %q", fn.Name)
+		}
+	}
+}
+
+func TestParameterExtractionAtUnderscore(t *testing.T) {
+	src := []byte(`#!/usr/bin/perl
+package ParamTest;
+
+sub with_list_params {
+    my ($self, $name, $value) = @_;
+    return "$name=$value";
+}
+
+sub with_two_params {
+    my ($arg1, $arg2) = @_;
+    return $arg1 + $arg2;
+}
+
+sub with_array_params {
+    my @args = @_;
+    return scalar @args;
+}
+
+sub with_shift_params {
+    my $self = shift;
+    my $name = shift;
+    return $name;
+}
+`)
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "params.pm", Content: src},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mod := graph.Modules[0]
+
+	findFn := func(name string) *struct{ params []string } {
+		for _, fn := range mod.Functions {
+			if fn.Name == name {
+				var names []string
+				for _, p := range fn.Parameters {
+					names = append(names, p.Name)
+				}
+				return &struct{ params []string }{params: names}
+			}
+		}
+		return nil
+	}
+
+	// my ($self, $name, $value) = @_;
+	fn := findFn("with_list_params")
+	if fn == nil {
+		t.Fatal("expected to find with_list_params")
+	}
+	if len(fn.params) != 3 {
+		t.Errorf("with_list_params: expected 3 params, got %d: %v", len(fn.params), fn.params)
+	} else {
+		if fn.params[0] != "self" || fn.params[1] != "name" || fn.params[2] != "value" {
+			t.Errorf("with_list_params: unexpected params %v", fn.params)
+		}
+	}
+
+	// my ($arg1, $arg2) = @_;
+	fn = findFn("with_two_params")
+	if fn == nil {
+		t.Fatal("expected to find with_two_params")
+	}
+	if len(fn.params) != 2 {
+		t.Errorf("with_two_params: expected 2 params, got %d: %v", len(fn.params), fn.params)
+	}
+
+	// my @args = @_;
+	fn = findFn("with_array_params")
+	if fn == nil {
+		t.Fatal("expected to find with_array_params")
+	}
+	if len(fn.params) != 1 || fn.params[0] != "args" {
+		t.Errorf("with_array_params: expected [args], got %v", fn.params)
+	}
+
+	// my $self = shift; my $name = shift;
+	fn = findFn("with_shift_params")
+	if fn == nil {
+		t.Fatal("expected to find with_shift_params")
+	}
+	if len(fn.params) < 2 {
+		t.Errorf("with_shift_params: expected at least 2 params from shift, got %d: %v", len(fn.params), fn.params)
+	}
+}
+
+func TestMixedPODAndSubs(t *testing.T) {
+	src := []byte(`#!/usr/bin/perl
+package Mixed;
+
+=head1 NAME
+
+Mixed - mixed POD and code
+
+=cut
+
+use strict;
+use warnings;
+
+sub initialize {
+    my ($self, $config) = @_;
+    $self->{config} = $config;
+}
+
+=head2 run
+
+Runs the thing.
+
+=cut
+
+sub run {
+    my ($self) = @_;
+    $self->initialize({});
+    return 1;
+}
+`)
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "mixed.pm", Content: src},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mod := graph.Modules[0]
+	if mod.Name != "Mixed" {
+		t.Errorf("expected Mixed, got %s", mod.Name)
+	}
+
+	if len(mod.Functions) < 2 {
+		t.Errorf("expected at least 2 functions, got %d", len(mod.Functions))
+	}
+
+	// Verify initialize has its parameters extracted
+	for _, fn := range mod.Functions {
+		if fn.Name == "initialize" {
+			if len(fn.Parameters) == 0 {
+				t.Error("expected parameters for initialize (self, config)")
+			}
+			break
+		}
+	}
+
+	// run should call initialize
+	for _, fn := range mod.Functions {
+		if fn.Name == "run" {
+			found := false
+			for _, call := range fn.Calls {
+				if call == "initialize" {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected run to call initialize, calls: %v", fn.Calls)
+			}
+			break
+		}
+	}
+}
+
+func TestMooseOOP(t *testing.T) {
+	src := []byte(`#!/usr/bin/perl
+package Animal;
+
+use Moose;
+
+has 'name' => (is => 'rw', isa => 'Str');
+has 'sound' => (is => 'ro', isa => 'Str', default => 'generic');
+
+extends 'LivingThing';
+with 'Printable';
+
+sub speak {
+    my ($self) = @_;
+    printf "%s says %s\n", $self->name, $self->sound;
+}
+
+sub BUILD {
+    my ($self, $args) = @_;
+    # post-construction hook
+}
+
+1;
+`)
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "animal.pm", Content: src},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mod := graph.Modules[0]
+	if mod.Name != "Animal" {
+		t.Errorf("expected Animal, got %s", mod.Name)
+	}
+
+	// Should detect Moose framework
+	if mod.Metadata["oop_framework"] != "Moose" {
+		t.Errorf("expected oop_framework=Moose, got %q", mod.Metadata["oop_framework"])
+	}
+
+	// Moose attributes should be captured as data types
+	attrFound := false
+	for _, dt := range mod.DataTypes {
+		if dt.Metadata["kind"] == "moose_attribute" {
+			attrFound = true
+			break
+		}
+	}
+	if !attrFound {
+		t.Error("expected Moose attributes to be captured as data types")
+	}
+
+	// speak and BUILD should be functions
+	fnNames := make(map[string]bool)
+	for _, fn := range mod.Functions {
+		fnNames[fn.Name] = true
+	}
+	if !fnNames["speak"] {
+		t.Error("expected speak function")
+	}
+	if !fnNames["BUILD"] {
+		t.Error("expected BUILD function")
+	}
+}
+
+func TestClosureSupport(t *testing.T) {
+	src := []byte(`#!/usr/bin/perl
+package Closures;
+
+sub make_counter {
+    my ($start) = @_;
+
+    my $count = $start;
+
+    my $increment = sub {
+        $count++;
+        return $count;
+    };
+
+    my $reset = sub {
+        $count = $start;
+    };
+
+    return ($increment, $reset);
+}
+`)
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "closures.pm", Content: src},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mod := graph.Modules[0]
+
+	// make_counter should be parsed
+	fnNames := make(map[string]bool)
+	for _, fn := range mod.Functions {
+		fnNames[fn.Name] = true
+	}
+	if !fnNames["make_counter"] {
+		t.Error("expected make_counter function")
+	}
+
+	// At least one closure (increment or reset) should be detected
+	closureFound := false
+	for _, fn := range mod.Functions {
+		if fn.Metadata["kind"] == "closure" {
+			closureFound = true
+			break
+		}
+	}
+	if !closureFound {
+		t.Error("expected at least one closure to be detected")
+	}
+}
+
 func containsSubstring(s, substr string) bool {
 	return len(substr) > 0 && len(s) >= len(substr) && findSubstring(s, substr)
 }

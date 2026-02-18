@@ -1,4 +1,4 @@
-.PHONY: build test lint clean setup
+.PHONY: build test lint clean setup docker-build integration-test fmt coverage
 
 build:
 	go build ./...
@@ -20,3 +20,15 @@ bin/anvil: cmd/anvil/main.go
 
 bin/worker: cmd/worker/main.go
 	go build -o bin/worker ./cmd/worker
+
+docker-build:
+	docker build -t anvil:latest .
+
+integration-test:
+	go test -tags=integration -race ./...
+
+fmt:
+	gofmt -w .
+
+coverage:
+	go test -coverprofile=coverage.out ./... && go tool cover -html=coverage.out

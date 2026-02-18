@@ -49,7 +49,7 @@ func (p *Plugin) ResolveDependencies(ctx context.Context, graph *ir.SemanticGrap
 }
 
 func parseModule(f plugins.SourceFile) *ir.Module {
-	content := string(f.Content)
+	content := stripPOD(string(f.Content))
 	lines := strings.Split(content, "\n")
 
 	mod := &ir.Module{
@@ -57,6 +57,12 @@ func parseModule(f plugins.SourceFile) *ir.Module {
 		Path:     f.Path,
 		Language: "perl",
 		Metadata: map[string]string{},
+	}
+
+	// Detect Moose/Moo OOP usage
+	oop := detectOOPFramework(lines)
+	if oop != "" {
+		mod.Metadata["oop_framework"] = oop
 	}
 
 	// Track module-level dependencies (use/require)
@@ -125,10 +131,73 @@ func parseModuleDependencies(lines []string) []string {
 	return deps
 }
 
+// podDirectives is the set of known POD directive keywords.
+var podDirectives = map[string]bool{
+	"head1": true, "head2": true, "head3": true, "head4": true,
+	"pod": true, "over": true, "item": true, "back": true,
+	"begin": true, "end": true, "for": true, "encoding": true,
+}
+
+// stripPOD removes POD documentation blocks from Perl source.
+// POD blocks start with =<directive> at the start of a line and end with =cut.
+func stripPOD(source string) string {
+	lines := strings.Split(source, "\n")
+	var result []string
+	inPOD := false
+
+	for _, line := range lines {
+		// POD directives must start at the beginning of the line (no leading whitespace)
+		if !inPOD {
+			if strings.HasPrefix(line, "=") {
+				// Check if the word after = is a known POD directive
+				rest := line[1:]
+				word := rest
+				if idx := strings.IndexAny(rest, " \t\r\n"); idx >= 0 {
+					word = rest[:idx]
+				}
+				if podDirectives[word] {
+					inPOD = true
+					continue
+				}
+			}
+			result = append(result, line)
+		} else {
+			// In POD mode: skip until =cut
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "=cut" {
+				inPOD = false
+			}
+		}
+	}
+
+	return strings.Join(result, "\n")
+}
+
 var (
 	// sub foo { ... }
 	// sub bar ($arg1, $arg2) { ... }
 	subPattern = regexp.MustCompile(`^\s*sub\s+([\w_]+)\s*(\([^)]*\))?\s*\{`)
+
+	// my ($a, $b) = @_; parameter extraction
+	atUnderscorePattern = regexp.MustCompile(`my\s*\(([^)]+)\)\s*=\s*@_`)
+
+	// my $self = shift; or my $arg = shift;
+	shiftPattern = regexp.MustCompile(`^\s*my\s+\$(\w+)\s*=\s*shift\s*;`)
+
+	// my @args = @_;
+	arrayAtUnderscorePattern = regexp.MustCompile(`my\s+@(\w+)\s*=\s*@_`)
+
+	// my $name = sub { ... } closure detection
+	closurePattern = regexp.MustCompile(`^\s*my\s+\$(\w+)\s*=\s*sub\s*\{`)
+
+	// Moose/Moo attribute declarations: has 'name' => (...)
+	mooseHasPattern = regexp.MustCompile(`^\s*has\s+['"]?([\w_]+)['"]?\s*=>`)
+
+	// Moose/Moo role application: with 'RoleName'
+	mooseWithPattern = regexp.MustCompile(`^\s*with\s+['"]?([\w:]+)['"]?`)
+
+	// Moose/Moo extends: extends 'BaseClass'
+	mooseExtendsPattern = regexp.MustCompile(`^\s*extends\s+['"]?([\w:]+)['"]?`)
 
 	// Function calls: foo(), bar($x), Foo::Bar->method(), $obj->method()
 	funcCallPattern   = regexp.MustCompile(`\b([\w:]+)\s*\(`)
@@ -149,6 +218,29 @@ var (
 	dbiExecutePattern = regexp.MustCompile(`->(execute|fetchrow|fetch)\b`)
 )
 
+// detectOOPFramework checks if the source uses Moose, Moo, or Mouse OOP frameworks.
+func detectOOPFramework(lines []string) string {
+	for _, line := range lines {
+		stripped := stripComment(line)
+		if strings.Contains(stripped, "use Moose") {
+			return "Moose"
+		}
+		if strings.Contains(stripped, "use Moo") && !strings.Contains(stripped, "use Moo::") {
+			return "Moo"
+		}
+		if strings.Contains(stripped, "use Mouse") {
+			return "Mouse"
+		}
+		if strings.Contains(stripped, "use Moose::Role") {
+			return "Moose::Role"
+		}
+		if strings.Contains(stripped, "use Moo::Role") {
+			return "Moo::Role"
+		}
+	}
+	return ""
+}
+
 func parseSubs(lines []string) ([]*ir.Function, []*ir.DataType, []*ir.IOContract) {
 	var functions []*ir.Function
 	var dataTypes []*ir.DataType
@@ -164,6 +256,10 @@ func parseSubs(lines []string) ([]*ir.Function, []*ir.DataType, []*ir.IOContract
 	flush := func() {
 		if currentFn != nil {
 			currentFn.Body = strings.Join(bodyLines, "\n")
+			// Extract parameters from body @_ patterns if not already set
+			if len(currentFn.Parameters) == 0 {
+				currentFn.Parameters = extractParametersFromBody(bodyLines)
+			}
 			// Deduplicate calls
 			currentFn.Calls = dedup(currentFn.Calls)
 			functions = append(functions, currentFn)
@@ -175,6 +271,29 @@ func parseSubs(lines []string) ([]*ir.Function, []*ir.DataType, []*ir.IOContract
 		line = stripComment(line)
 		if line == "" {
 			continue
+		}
+
+		// Detect closure: my $name = sub { ... }
+		if m := closurePattern.FindStringSubmatch(line); len(m) > 1 && !inSub {
+			flush()
+			closureName := m[1]
+			currentFn = &ir.Function{
+				Name:     closureName,
+				Metadata: map[string]string{"kind": "closure"},
+			}
+			bodyLines = []string{originalLine}
+			inSub = true
+			braceDepth = countBraces(line)
+			continue
+		}
+
+		// Detect nested closure inside a sub body: record it as a separate function
+		if m := closurePattern.FindStringSubmatch(line); len(m) > 1 && inSub {
+			closureName := m[1]
+			functions = append(functions, &ir.Function{
+				Name:     closureName,
+				Metadata: map[string]string{"kind": "closure"},
+			})
 		}
 
 		// Detect sub declaration
@@ -191,15 +310,33 @@ func parseSubs(lines []string) ([]*ir.Function, []*ir.DataType, []*ir.IOContract
 				Metadata: map[string]string{},
 			}
 
-			// Parse parameters
+			// Parse parameters from prototype signature: sub foo ($a, $b) { ... }
 			if params != "" {
 				currentFn.Parameters = parseParameters(params)
+			}
+
+			// Detect Moose/Moo accessor modifiers
+			if name == "BUILD" || name == "BUILDARGS" || name == "DEMOLISH" {
+				currentFn.Metadata["moose_lifecycle"] = name
 			}
 
 			bodyLines = []string{originalLine}
 			inSub = true
 			braceDepth = countBraces(line)
 			continue
+		}
+
+		// Detect Moose/Moo attribute declarations (outside subs)
+		if !inSub {
+			if m := mooseHasPattern.FindStringSubmatch(line); len(m) > 1 {
+				attrName := m[1]
+				varsSeen["moose_attr_"+attrName] = true
+				dataTypes = append(dataTypes, &ir.DataType{
+					Name:     attrName,
+					Kind:     ir.TypeUnknown,
+					Metadata: map[string]string{"kind": "moose_attribute"},
+				})
+			}
 		}
 
 		// Track brace depth when inside a sub
@@ -231,6 +368,77 @@ func parseSubs(lines []string) ([]*ir.Function, []*ir.DataType, []*ir.IOContract
 	flush()
 
 	return functions, dataTypes, ioContracts
+}
+
+// extractParametersFromBody scans the body lines of a sub for common @_ parameter
+// assignment patterns and returns the extracted parameters.
+//
+// Supported patterns:
+//   - my ($self, $name, $value) = @_;
+//   - my ($arg1, $arg2) = @_;
+//   - my $self = shift; my $name = shift;
+//   - my @args = @_;
+func extractParametersFromBody(bodyLines []string) []*ir.Parameter {
+	var params []*ir.Parameter
+
+	// Try: my ($a, $b, ...) = @_;
+	// Uses the package-level atUnderscorePattern.
+	for _, line := range bodyLines {
+		stripped := stripComment(line)
+		if m := atUnderscorePattern.FindStringSubmatch(stripped); len(m) > 1 {
+			parts := strings.Split(m[1], ",")
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if part == "" {
+					continue
+				}
+				name := strings.TrimPrefix(part, "$")
+				name = strings.TrimPrefix(name, "@")
+				name = strings.TrimPrefix(name, "%")
+				name = strings.TrimSpace(name)
+				params = append(params, &ir.Parameter{
+					Name: name,
+					Type: &ir.DataType{Name: "scalar", Kind: ir.TypeUnknown},
+				})
+			}
+			// Found the primary @_ assignment; stop looking for more.
+			return params
+		}
+	}
+
+	// Try: my @args = @_;
+	for _, line := range bodyLines {
+		stripped := stripComment(line)
+		if m := arrayAtUnderscorePattern.FindStringSubmatch(stripped); len(m) > 1 {
+			name := m[1]
+			return []*ir.Parameter{
+				{
+					Name: name,
+					Type: &ir.DataType{Name: "array", Kind: ir.TypeArray},
+				},
+			}
+		}
+	}
+
+	// Try: sequential my $x = shift; statements at the top of the body.
+	for _, line := range bodyLines {
+		stripped := stripComment(line)
+		if m := shiftPattern.FindStringSubmatch(stripped); len(m) > 1 {
+			name := m[1]
+			params = append(params, &ir.Parameter{
+				Name: name,
+				Type: &ir.DataType{Name: "scalar", Kind: ir.TypeUnknown},
+			})
+		} else if len(params) > 0 {
+			// Stop collecting shift params once we hit a non-shift line
+			// (ignore blank / comment-only lines which stripComment returns "")
+			if stripped != "" {
+				break
+			}
+		}
+	}
+
+	return params
 }
 
 func parseParameters(params string) []*ir.Parameter {

@@ -137,6 +137,57 @@ func stripMarkdownFences(s string) string {
 	return strings.Join(lines[start:end], "\n")
 }
 
+// sanitizeLLMOutput strips Go-specific boilerplate that LLMs commonly include:
+// package declarations, import blocks, and trailing prose.
+func sanitizeLLMOutput(s string) string {
+	lines := strings.Split(s, "\n")
+	var cleaned []string
+	inImportBlock := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Skip package declarations
+		if strings.HasPrefix(trimmed, "package ") {
+			continue
+		}
+
+		// Detect and skip multi-line import blocks: import (...)
+		if trimmed == "import (" {
+			inImportBlock = true
+			continue
+		}
+		if inImportBlock {
+			if trimmed == ")" {
+				inImportBlock = false
+			}
+			continue
+		}
+
+		// Skip single-line import statements: import "pkg" or import alias "pkg"
+		if strings.HasPrefix(trimmed, "import ") {
+			continue
+		}
+
+		// Strip trailing prose
+		if strings.HasPrefix(trimmed, "This ") || strings.HasPrefix(trimmed, "Note:") ||
+			strings.HasPrefix(trimmed, "The above") || strings.HasPrefix(trimmed, "Here ") {
+			break
+		}
+
+		cleaned = append(cleaned, line)
+	}
+
+	// Trim leading/trailing empty lines
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
+		cleaned = cleaned[1:]
+	}
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+
+	return strings.Join(cleaned, "\n")
+}
+
 // generateGoFunctionWithLLM generates a Go function using LLM.
 func generateGoFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Function, graph *ir.SemanticGraph, provider llm.Provider) string {
 	// Build context for LLM
@@ -178,6 +229,7 @@ Rules:
 	}
 
 	impl := strings.TrimSpace(stripMarkdownFences(resp.Content))
+	impl = sanitizeLLMOutput(impl)
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("// %s is migrated from %s.%s\n", toPascalCase(fn.Name), mod.Name, fn.Name))

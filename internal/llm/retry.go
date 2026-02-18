@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"net"
 	"net/http"
 	"strings"
@@ -126,7 +127,9 @@ func (r *RetryProvider) Embed(ctx context.Context, texts []string) ([][]float32,
 	return nil, fmt.Errorf("max retries (%d) exceeded: %w", r.config.MaxRetries, lastErr)
 }
 
-// calculateBackoff returns the delay for the given attempt using exponential backoff.
+// calculateBackoff returns the delay for the given attempt using exponential
+// backoff with up to 25% random jitter to prevent thundering herd when multiple
+// workers hit rate limits simultaneously.
 func (r *RetryProvider) calculateBackoff(attempt int) time.Duration {
 	// Exponential backoff: delay * 2^(attempt-1)
 	delay := r.config.RetryDelay
@@ -136,6 +139,11 @@ func (r *RetryProvider) calculateBackoff(attempt int) time.Duration {
 			delay = r.config.MaxDelay
 			break
 		}
+	}
+	// Add 0-25% random jitter
+	if delay > 0 {
+		jitter := time.Duration(rand.Int63n(int64(delay) / 4))
+		delay = delay + jitter
 	}
 	return delay
 }

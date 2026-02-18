@@ -22,12 +22,13 @@ RUN mkdir -p /out && \
 
 # Stage 2: Runtime
 FROM alpine:3.19
+LABEL org.opencontainers.image.source="https://github.com/efebarandurmaz/anvil"
+LABEL org.opencontainers.image.description="Multi-Agent Legacy Code Modernization Platform"
 
 RUN apk add --no-cache ca-certificates tzdata
 
 # Create non-root user
 RUN adduser -D -g '' anvil
-USER anvil
 
 WORKDIR /app
 
@@ -35,6 +36,12 @@ WORKDIR /app
 COPY --from=builder /out/anvil /usr/local/bin/anvil
 COPY --from=builder /out/anvil-worker /usr/local/bin/anvil-worker
 COPY --from=builder /app/configs /app/configs
+
+USER anvil
+
+EXPOSE 8080 9090
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/app/anvil", "--version"]
 
 ENTRYPOINT ["anvil"]
 CMD ["--help"]

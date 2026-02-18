@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 
 	"github.com/efebarandurmaz/anvil/internal/agents"
@@ -61,8 +62,14 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 		}
 	}
 
-	// Process functions concurrently with worker pool
-	const maxConcurrent = 1
+	// Process functions concurrently with worker pool.
+	// maxConcurrent defaults to 1 but can be overridden via Params["max_concurrent"].
+	maxConcurrent := 1
+	if mc, ok := ac.Params["max_concurrent"]; ok {
+		if v, err := strconv.Atoi(mc); err == nil && v > 0 {
+			maxConcurrent = v
+		}
+	}
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex

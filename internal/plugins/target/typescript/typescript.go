@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/efebarandurmaz/anvil/internal/agents/architect"
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
@@ -313,7 +314,7 @@ func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext str
 
 	// Check for Judge feedback from previous retry
 	feedbackHint := ""
-	if fb, ok := ctx.Value("judge_feedback").(string); ok && fb != "" {
+	if fb := architect.JudgeFeedbackFromContext(ctx); fb != "" {
 		feedbackHint = fmt.Sprintf(`
 
 IMPORTANT - Previous attempt had these errors. Fix them:

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -83,8 +84,14 @@ func (j *Judge) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Agent
 		}
 	}
 
-	// Verify functions concurrently with worker pool
-	const maxConcurrent = 1
+	// Verify functions concurrently with worker pool.
+	// maxConcurrent defaults to 1 but can be overridden via Params["max_concurrent"].
+	maxConcurrent := 1
+	if mc, ok := ac.Params["max_concurrent"]; ok {
+		if v, err := strconv.Atoi(mc); err == nil && v > 0 {
+			maxConcurrent = v
+		}
+	}
 	sem := make(chan struct{}, maxConcurrent)
 	var wg sync.WaitGroup
 	var mu sync.Mutex

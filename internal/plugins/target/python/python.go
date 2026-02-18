@@ -138,6 +138,54 @@ func stripMarkdownFences(s string) string {
 	return strings.Join(lines[start:end], "\n")
 }
 
+// sanitizeLLMOutput strips Python-specific boilerplate that LLMs commonly
+// include: import statements, __main__ blocks, and trailing prose.
+func sanitizeLLMOutput(s string) string {
+	lines := strings.Split(s, "\n")
+	var cleaned []string
+	inMainBlock := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+
+		// Detect and skip `if __name__ == "__main__":` blocks
+		if trimmed == `if __name__ == "__main__":` || trimmed == `if __name__ == '__main__':` {
+			inMainBlock = true
+			continue
+		}
+		if inMainBlock {
+			// Block continues while line is indented or blank
+			if trimmed == "" || strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+				continue
+			}
+			// Non-indented non-blank line ends the block
+			inMainBlock = false
+		}
+
+		// Skip import statements
+		if strings.HasPrefix(trimmed, "import ") || strings.HasPrefix(trimmed, "from ") {
+			continue
+		}
+
+		// Strip trailing prose
+		if strings.HasPrefix(trimmed, "This ") || strings.HasPrefix(trimmed, "Note:") ||
+			strings.HasPrefix(trimmed, "The above") || strings.HasPrefix(trimmed, "Here ") {
+			break
+		}
+
+		cleaned = append(cleaned, line)
+	}
+
+	// Trim leading/trailing empty lines
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
+		cleaned = cleaned[1:]
+	}
+	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
+		cleaned = cleaned[:len(cleaned)-1]
+	}
+
+	return strings.Join(cleaned, "\n")
+}
+
 // generatePythonFunctionWithLLM generates a Python function using LLM.
 func generatePythonFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Function, graph *ir.SemanticGraph, provider llm.Provider) string {
 	// Build context for LLM
@@ -188,6 +236,7 @@ Rules:
 	}
 
 	impl := strings.TrimSpace(stripMarkdownFences(resp.Content))
+	impl = sanitizeLLMOutput(impl)
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("    def %s(self, _input: UnknownRecord | None = None) -> None:\n", toSnakeIdent(fn.Name)))

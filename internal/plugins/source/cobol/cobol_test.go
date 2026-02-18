@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 )
 
@@ -100,6 +101,31 @@ func TestParsePerformThru(t *testing.T) {
 	}
 }
 
+// findDataType recursively searches a slice of DataTypes for one matching the predicate.
+func findDataType(types []*ir.DataType, pred func(*ir.DataType) bool) *ir.DataType {
+	for _, dt := range types {
+		if pred(dt) {
+			return dt
+		}
+		if found := findDataType(dt.Fields, pred); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// countDataTypes recursively counts all DataType nodes matching the predicate.
+func countDataTypes(types []*ir.DataType, pred func(*ir.DataType) bool) int {
+	count := 0
+	for _, dt := range types {
+		if pred(dt) {
+			count++
+		}
+		count += countDataTypes(dt.Fields, pred)
+	}
+	return count
+}
+
 func TestParse88Level(t *testing.T) {
 	types := parseDataDivision([]string{
 		"       DATA DIVISION.",
@@ -111,20 +137,25 @@ func TestParse88Level(t *testing.T) {
 		"          05 WS-COUNT PIC S9(4) COMP.",
 	})
 
-	boolCount := 0
-	compFound := false
-	for _, dt := range types {
-		if dt.Kind == "boolean" {
-			boolCount++
-		}
-		if dt.Name == "WS-COUNT" && dt.Metadata["usage"] == "COMP" {
-			compFound = true
-		}
+	// With hierarchy, only WS-FLAGS is top-level; children are nested.
+	if len(types) != 1 {
+		t.Fatalf("expected 1 top-level data type (WS-FLAGS), got %d", len(types))
 	}
+	if types[0].Name != "WS-FLAGS" {
+		t.Errorf("expected top-level WS-FLAGS, got %s", types[0].Name)
+	}
+
+	boolCount := countDataTypes(types, func(dt *ir.DataType) bool {
+		return dt.Kind == "boolean"
+	})
+	compFound := findDataType(types, func(dt *ir.DataType) bool {
+		return dt.Name == "WS-COUNT" && dt.Metadata["usage"] == "COMP"
+	})
+
 	if boolCount != 2 {
 		t.Errorf("expected 2 boolean (88-level) types, got %d", boolCount)
 	}
-	if !compFound {
+	if compFound == nil {
 		t.Error("expected WS-COUNT with COMP usage")
 	}
 }
@@ -197,15 +228,13 @@ func TestCopybookExpansion(t *testing.T) {
 	if mod.Name != "TESTCOPY" {
 		t.Errorf("expected TESTCOPY, got %s", mod.Name)
 	}
-	// After expansion, the module should have the copybook's data types
-	foundCustID := false
-	for _, dt := range mod.DataTypes {
-		if dt.Name == "CUST-ID" {
-			foundCustID = true
-		}
-	}
-	if !foundCustID {
-		t.Error("expected CUST-ID from expanded copybook in module data types")
+	// After expansion, the module should have the copybook's data types.
+	// CUST-ID is a child of CUSTOMER-RECORD (05 level), so search recursively.
+	found := findDataType(mod.DataTypes, func(dt *ir.DataType) bool {
+		return dt.Name == "CUST-ID"
+	})
+	if found == nil {
+		t.Error("expected CUST-ID from expanded copybook in module data types (recursive)")
 	}
 }
 
@@ -222,21 +251,190 @@ func TestCopybookReplacingLeading(t *testing.T) {
 		t.Fatal(err)
 	}
 	mod := graph.Modules[0]
-	foundPlayerX := false
-	foundPlayerY := false
-	for _, dt := range mod.DataTypes {
-		if dt.Name == "PLAYER-X" {
-			foundPlayerX = true
-		}
-		if dt.Name == "PLAYER-Y" {
-			foundPlayerY = true
-		}
-	}
-	if !foundPlayerX {
+	// PLAYER-X and PLAYER-Y are 05-level children of MY-RECORD (01-level); search recursively.
+	foundPlayerX := findDataType(mod.DataTypes, func(dt *ir.DataType) bool {
+		return dt.Name == "PLAYER-X"
+	})
+	foundPlayerY := findDataType(mod.DataTypes, func(dt *ir.DataType) bool {
+		return dt.Name == "PLAYER-Y"
+	})
+	if foundPlayerX == nil {
 		t.Error("expected PLAYER-X after LEADING REPLACING")
 	}
-	if !foundPlayerY {
+	if foundPlayerY == nil {
 		t.Error("expected PLAYER-Y after LEADING REPLACING")
+	}
+}
+
+func TestContinuationLines(t *testing.T) {
+	// In fixed-format COBOL, a '-' in column 7 (index 6) marks a continuation.
+	// The content from column 12 (index 11) is appended to the previous line.
+	lines := []string{
+		"       01 LONG-NAME-",
+		"      -    RECORD PIC X(10).",
+	}
+	joined := joinContinuationLines(lines)
+	if len(joined) != 1 {
+		t.Fatalf("expected 1 joined line, got %d: %v", len(joined), joined)
+	}
+	if !strings.Contains(joined[0], "RECORD") {
+		t.Errorf("expected continuation content 'RECORD' in joined line, got: %q", joined[0])
+	}
+
+	// Verify it parses correctly through parseDataDivision
+	src := []string{
+		"       DATA DIVISION.",
+		"       WORKING-STORAGE SECTION.",
+		"       01 WS-CONTINUED-",
+		"      -    VALUE PIC X(20).",
+	}
+	preprocessed := joinContinuationLines(src)
+	types := parseDataDivision(preprocessed)
+	if len(types) != 1 {
+		t.Fatalf("expected 1 data type after continuation join, got %d", len(types))
+	}
+	if types[0].Name != "WS-CONTINUED-VALUE" {
+		t.Errorf("expected WS-CONTINUED-VALUE, got %s", types[0].Name)
+	}
+}
+
+// TestPreprocessLinesCommentRemoval verifies that fixed-format comment lines
+// (column 7 == '*' or '/') are dropped by preprocessLines.
+func TestPreprocessLinesCommentRemoval(t *testing.T) {
+	lines := []string{
+		"       IDENTIFICATION DIVISION.",
+		"      * This is a comment line",
+		"       PROGRAM-ID. COMMENTS.",
+		"      / Page-eject comment",
+		"       PROCEDURE DIVISION.",
+		"       MAIN.",
+		"           STOP RUN.",
+	}
+	result := preprocessLines(lines)
+	for _, l := range result {
+		if len(l) >= 7 && (l[6] == '*' || l[6] == '/') {
+			t.Errorf("comment line was not removed: %q", l)
+		}
+	}
+	// Should have 5 lines (2 comments removed)
+	if len(result) != 5 {
+		t.Errorf("expected 5 lines after comment removal, got %d: %v", len(result), result)
+	}
+}
+
+// TestPreprocessLinesStringLiteralContinuation verifies that a string literal
+// split across lines with a '-' continuation indicator is rejoined correctly.
+func TestPreprocessLinesStringLiteralContinuation(t *testing.T) {
+	// Typical pattern: string value split across lines
+	lines := []string{
+		`       MOVE "HELLO, W` + strings.Repeat(" ", 52) + `"`,
+		`      -    ORLD" TO WS-MESSAGE.`,
+	}
+	result := preprocessLines(lines)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 joined line, got %d: %v", len(result), result)
+	}
+	if !strings.Contains(result[0], "ORLD") {
+		t.Errorf("expected continuation content 'ORLD' in joined line, got: %q", result[0])
+	}
+}
+
+// TestPreprocessLinesMixed verifies correct handling of a mix of regular,
+// comment, and continuation lines together.
+func TestPreprocessLinesMixed(t *testing.T) {
+	lines := []string{
+		"       DATA DIVISION.",
+		"      * Top-of-section comment",
+		"       WORKING-STORAGE SECTION.",
+		"       01 WS-LONG-",
+		"      -    NAME PIC X(10).",
+		"      * Another comment",
+		"       01 WS-SHORT PIC 9(4).",
+	}
+	result := preprocessLines(lines)
+	// 2 comments dropped, continuation merged: expect 4 lines
+	if len(result) != 4 {
+		t.Fatalf("expected 4 lines, got %d: %v", len(result), result)
+	}
+	// The third result line should be the merged data item
+	found := false
+	for _, l := range result {
+		if strings.Contains(l, "WS-LONG-") && strings.Contains(l, "NAME") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected merged 'WS-LONG-NAME' line in result: %v", result)
+	}
+}
+
+// TestPreprocessLinesShortLines verifies that lines shorter than 7 characters
+// (free-format or truncated) are passed through without column-based processing.
+func TestPreprocessLinesShortLines(t *testing.T) {
+	// All lines < 7 chars — not fixed-format, no column rules apply
+	lines := []string{
+		"ID.",
+		"FOO.",
+		"BAR.",
+	}
+	result := preprocessLines(lines)
+	if len(result) != 3 {
+		t.Errorf("expected 3 lines unchanged, got %d: %v", len(result), result)
+	}
+}
+
+// TestPreprocessLinesIntegration verifies that a MOVE statement split with a
+// continuation line is parsed correctly end-to-end via Parse.
+func TestPreprocessLinesIntegration(t *testing.T) {
+	// Build source where a COMPUTE is split across a continuation line.
+	// Column positions: 1-6 sequence area, 7 indicator, 8-72 content area.
+	src := []byte(
+		"       IDENTIFICATION DIVISION.\n" +
+			"       PROGRAM-ID. CONTTEST.\n" +
+			"       DATA DIVISION.\n" +
+			"       WORKING-STORAGE SECTION.\n" +
+			"       01 WS-RESULT PIC 9(10).\n" +
+			"       PROCEDURE DIVISION.\n" +
+			"       MAIN-PARAGRAPH.\n" +
+			"           COMPUTE WS-RESULT =\n" +
+			"      -        100 + 200.\n" +
+			"           STOP RUN.\n",
+	)
+	p := New()
+	graph, err := p.Parse(context.Background(), []plugins.SourceFile{
+		{Path: "conttest.cbl", Content: src},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Modules) != 1 {
+		t.Fatalf("expected 1 module, got %d", len(graph.Modules))
+	}
+	if graph.Modules[0].Name != "CONTTEST" {
+		t.Errorf("expected CONTTEST, got %s", graph.Modules[0].Name)
+	}
+}
+
+// TestPreprocessLinesFreeFormat verifies that free-format COBOL (short lines,
+// no fixed-column structure) skips column-based indicator processing.
+func TestPreprocessLinesFreeFormat(t *testing.T) {
+	// Free-format: lines well under 72 chars; *> is the free-format comment marker
+	lines := []string{
+		"IDENTIFICATION DIVISION.",
+		"PROGRAM-ID. FREE.",
+		"PROCEDURE DIVISION. *> inline comment",
+		"MAIN.",
+		"    STOP RUN.",
+	}
+	result := preprocessLines(lines)
+	// Inline *> comment should be stripped from line 3
+	for _, l := range result {
+		if strings.Contains(l, "*>") {
+			t.Errorf("free-format inline comment was not stripped: %q", l)
+		}
+	}
+	if len(result) != 5 {
+		t.Errorf("expected 5 lines, got %d", len(result))
 	}
 }
 
