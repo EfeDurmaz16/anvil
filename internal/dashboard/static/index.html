@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anvil Dashboard - Real-time Migration Monitoring</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <h1 class="header-title">Anvil Dashboard</h1>
+            <div class="connection-status">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span class="status-text" id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Stats Cards -->
+        <section class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Migrations</div>
+                <div class="stat-value" id="statTotal">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active</div>
+                <div class="stat-value stat-active" id="statActive">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Completed</div>
+                <div class="stat-value stat-completed" id="statCompleted">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Failed</div>
+                <div class="stat-value stat-failed" id="statFailed">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Success Rate</div>
+                <div class="stat-value" id="statSuccessRate">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">LLM Calls</div>
+                <div class="stat-value" id="statLLMCalls">-</div>
+            </div>
+        </section>
+
+        <!-- Migrations Table -->
+        <section class="migrations-section">
+            <h2 class="section-title">Migrations</h2>
+            <div class="table-container">
+                <table class="migrations-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Source → Target</th>
+                            <th>Status</th>
+                            <th>Duration</th>
+                            <th>Progress</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="migrationsTableBody">
+                        <tr class="empty-state">
+                            <td colspan="7">
+                                <div class="empty-state-content">
+                                    <p>No migrations yet</p>
+                                    <p class="empty-state-hint">Migrations will appear here when they start</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Log Viewer -->
+        <section class="logs-section">
+            <div class="logs-header">
+                <h2 class="section-title">Event Log</h2>
+                <button class="btn-clear-logs" id="btnClearLogs">Clear</button>
+            </div>
+            <div class="logs-container" id="logsContainer">
+                <div class="log-entry log-info">
+                    <span class="log-timestamp">[--:--:--]</span>
+                    <span class="log-message">Initializing dashboard...</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Notifications Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
