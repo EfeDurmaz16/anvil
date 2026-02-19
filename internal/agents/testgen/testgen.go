@@ -45,7 +45,7 @@ func (t *TestGen) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Age
 
 	for _, mod := range ac.Graph.Modules {
 		for _, fn := range mod.Functions {
-			testFile := generateTestFile(ctx, mod, fn, targetLang, ac.LLM)
+			testFile := generateTestFile(ctx, mod, fn, targetLang, ac.LLM, ac.DefaultOpts)
 			if testFile != nil {
 				testFiles = append(testFiles, *testFile)
 			}
@@ -75,12 +75,12 @@ func countFunctions(graph *ir.SemanticGraph) int {
 	return total
 }
 
-func generateTestFile(ctx context.Context, mod *ir.Module, fn *ir.Function, targetLang string, provider llm.Provider) *plugins.GeneratedFile {
+func generateTestFile(ctx context.Context, mod *ir.Module, fn *ir.Function, targetLang string, provider llm.Provider, opts *llm.RequestOptions) *plugins.GeneratedFile {
 	if provider == nil {
 		return nil // Will use stub generation instead
 	}
 
-	testCode := generateTestWithLLM(ctx, mod, fn, targetLang, provider)
+	testCode := generateTestWithLLM(ctx, mod, fn, targetLang, provider, opts)
 	if testCode == "" {
 		return nil
 	}
@@ -92,7 +92,7 @@ func generateTestFile(ctx context.Context, mod *ir.Module, fn *ir.Function, targ
 	}
 }
 
-func generateTestWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Function, targetLang string, provider llm.Provider) string {
+func generateTestWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Function, targetLang string, provider llm.Provider, opts *llm.RequestOptions) string {
 	// Build test generation context
 	var context_ strings.Builder
 	context_.WriteString(fmt.Sprintf("Module: %s\n", mod.Name))
@@ -124,7 +124,7 @@ Rules:
 		},
 	}
 
-	resp, err := provider.Complete(ctx, prompt, nil)
+	resp, err := provider.Complete(ctx, prompt, opts)
 	if err != nil {
 		return ""
 	}

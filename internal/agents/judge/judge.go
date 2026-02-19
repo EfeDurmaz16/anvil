@@ -108,7 +108,7 @@ func (j *Judge) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Agent
 			// overwhelming smaller LLMs with the entire output.
 			fnSnippet := extractFunctionSnippet(generatedText, j.fn.Name)
 
-			ok, reason, err := verifyFunction(ctx, ac.LLM, sourceLang, targetLang, j.mod.Name, j.fn.Name, j.fn.Body, fnSnippet)
+			ok, reason, err := verifyFunction(ctx, ac.LLM, ac.DefaultOpts, sourceLang, targetLang, j.mod.Name, j.fn.Name, j.fn.Body, fnSnippet)
 
 			mu.Lock()
 			completed++
@@ -160,7 +160,7 @@ type verdict struct {
 	Reason     string `json:"reason"`
 }
 
-func verifyFunction(ctx context.Context, provider llm.Provider, sourceLang, targetLang, module, fnName, originalBody, generatedCode string) (bool, string, error) {
+func verifyFunction(ctx context.Context, provider llm.Provider, opts *llm.RequestOptions, sourceLang, targetLang, module, fnName, originalBody, generatedCode string) (bool, string, error) {
 	prompt := &llm.Prompt{
 		SystemPrompt: fmt.Sprintf(
 			"You are a code equivalence verifier. Compare the original %s function with the generated %s code.\n"+
@@ -177,7 +177,7 @@ func verifyFunction(ctx context.Context, provider llm.Provider, sourceLang, targ
 		},
 	}
 
-	resp, err := provider.Complete(ctx, prompt, nil)
+	resp, err := provider.Complete(ctx, prompt, opts)
 	if err != nil {
 		return false, "", err
 	}

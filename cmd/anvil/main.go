@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/efebarandurmaz/anvil/internal/agents"
@@ -34,11 +37,38 @@ import (
 )
 
 func initLogger() {
+	configureLoggerFromEnv("", "")
+}
+
+func configureLoggerFromEnv(level, format string) {
+	// Environment overrides
+	if envFmt := os.Getenv("ANVIL_LOG_FORMAT"); envFmt != "" {
+		format = envFmt
+	}
+	if envLvl := os.Getenv("ANVIL_LOG_LEVEL"); envLvl != "" {
+		level = envLvl
+	}
+
+	// Parse log level
+	var slogLevel slog.Level
+	switch strings.ToLower(level) {
+	case "debug":
+		slogLevel = slog.LevelDebug
+	case "warn", "warning":
+		slogLevel = slog.LevelWarn
+	case "error":
+		slogLevel = slog.LevelError
+	default:
+		slogLevel = slog.LevelInfo
+	}
+
+	opts := &slog.HandlerOptions{Level: slogLevel}
+
 	var handler slog.Handler
-	if os.Getenv("ANVIL_LOG_FORMAT") == "json" {
-		handler = slog.NewJSONHandler(os.Stderr, nil)
+	if format == "json" {
+		handler = slog.NewJSONHandler(os.Stderr, opts)
 	} else {
-		handler = slog.NewTextHandler(os.Stderr, nil)
+		handler = slog.NewTextHandler(os.Stderr, opts)
 	}
 	slog.SetDefault(slog.New(handler))
 }
@@ -243,6 +273,20 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		cfg = &config.Config{}
 	}
 
+	// Reconfigure logger with config values
+	configureLoggerFromEnv(cfg.Log.Level, cfg.Log.Format)
+
+	// Build default LLM request options from config
+	defaultOpts := &llm.RequestOptions{}
+	if cfg.LLM.Temperature > 0 {
+		temp := cfg.LLM.Temperature
+		defaultOpts.Temperature = &temp
+	}
+	if cfg.LLM.MaxTokens > 0 {
+		maxTok := cfg.LLM.MaxTokens
+		defaultOpts.MaxTokens = &maxTok
+	}
+
 	registry := plugins.NewRegistry()
 	registry.RegisterSource(cobolplugin.New())
 	registry.RegisterSource(perlplugin.New())
@@ -327,8 +371,9 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		})
 		cart := cartographer.New()
 		cartResult, err := cart.Run(cartCtx, &agents.AgentContext{
-			Registry: registry,
-			Params:   map[string]string{"source": sourceLang, "input": inputPath},
+			Registry:    registry,
+			Params:      map[string]string{"source": sourceLang, "input": inputPath},
+			DefaultOpts: defaultOpts,
 		})
 		elapsed := time.Since(start)
 		if err != nil {
@@ -351,9 +396,10 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		observability.Audit().LogAgentStart(specCtx, "specular", workflowID, nil)
 		spec := specular.New()
 		specResult, err := spec.Run(specCtx, &agents.AgentContext{
-			Graph:    cartResult.Graph,
-			LLM:      specularProvider,
-			Registry: registry,
+			Graph:       cartResult.Graph,
+			LLM:         specularProvider,
+			Registry:    registry,
+			DefaultOpts: defaultOpts,
 		})
 		elapsed = time.Since(start)
 		if err != nil {
@@ -394,10 +440,11 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 			observability.Audit().LogAgentStart(archCtx, "architect", workflowID, archParams)
 			arch := architect.New()
 			archResult, err := arch.Run(archCtx, &agents.AgentContext{
-				Graph:    cartResult.Graph,
-				LLM:      architectProvider,
-				Registry: registry,
-				Params:   archParams,
+				Graph:       cartResult.Graph,
+				LLM:         architectProvider,
+				Registry:    registry,
+				Params:      archParams,
+				DefaultOpts: defaultOpts,
 			})
 			elapsed = time.Since(start)
 			if err != nil {
@@ -433,6 +480,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 					"target":          targetLang,
 					"generated_files": string(genFilesJSON),
 				},
+				DefaultOpts: defaultOpts,
 			})
 			elapsed = time.Since(start)
 			if err != nil {
@@ -478,6 +526,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 					"target":          targetLang,
 					"generated_files": "present",
 				},
+				DefaultOpts: defaultOpts,
 			})
 			elapsed = time.Since(start)
 			if err != nil {
@@ -654,27 +703,41 @@ func runHarness(fixturesPath, codePath, outputDir string, jsonOutput bool) error
 
 // recordFixtures records fixtures from a live system endpoint.
 func recordFixtures(endpoint, outputPath string) error {
-	slog.Info("recording fixtures", "endpoint", endpoint, "output", outputPath)
+	slog.Info("starting fixture recorder", "endpoint", endpoint, "output", outputPath)
 
-	// Create output file
-	f, err := os.Create(outputPath)
+	rec, err := harness.NewRecorder(&harness.RecorderConfig{
+		TargetURL:  endpoint,
+		ListenAddr: ":8090",
+		OutputPath: outputPath,
+	})
 	if err != nil {
-		return fmt.Errorf("create output file: %w", err)
+		return fmt.Errorf("create recorder: %w", err)
 	}
-	defer f.Close()
 
-	// Note: Full implementation would proxy requests to the endpoint
-	// and record request/response pairs as fixtures.
-	// For now, we provide a placeholder that explains the workflow.
+	fmt.Printf("\nAnvil Fixture Recorder\n")
+	fmt.Printf("  Proxy listening on: http://localhost:8090\n")
+	fmt.Printf("  Forwarding to:      %s\n", endpoint)
+	fmt.Printf("  Recording to:       %s\n", outputPath)
+	fmt.Printf("\nSend requests to http://localhost:8090 to record fixtures.\n")
+	fmt.Printf("Press Ctrl+C to stop recording.\n\n")
 
-	fmt.Println("\nRecording mode:")
-	fmt.Println("  1. Configure your client to proxy through Anvil")
-	fmt.Println("  2. Make requests to the legacy system")
-	fmt.Println("  3. Anvil captures request/response pairs as fixtures")
-	fmt.Println("  4. Use 'anvil harness run' to replay against modernized code")
-	fmt.Println("\nNote: For production recording, configure your API gateway")
-	fmt.Println("to export logs in Anvil's JSONL fixture format.")
+	// Handle shutdown signal
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		rec.Stop(shutdownCtx)
+	}()
+
+	err = rec.Start()
+	if err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("recorder error: %w", err)
+	}
+
+	fmt.Printf("\nRecording complete. %d fixtures written to %s\n", rec.Count(), outputPath)
 	return nil
 }
 

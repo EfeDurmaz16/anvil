@@ -87,26 +87,9 @@ func generateModuleWithLLM(ctx context.Context, mod *ir.Module, graph *ir.Semant
 	return b.String()
 }
 
-// stripThinkingTags removes <think>...</think> blocks from LLM output (e.g. qwen3).
-func stripThinkingTags(s string) string {
-	for {
-		start := strings.Index(s, "<think>")
-		if start == -1 {
-			break
-		}
-		end := strings.Index(s, "</think>")
-		if end == -1 {
-			s = strings.TrimSpace(s[:start])
-			break
-		}
-		s = s[:start] + s[end+len("</think>"):]
-	}
-	return strings.TrimSpace(s)
-}
-
 // stripMarkdownFences removes markdown code fences from LLM output.
 func stripMarkdownFences(s string) string {
-	s = stripThinkingTags(s)
+	s = llm.StripThinkingTags(s)
 	lines := strings.Split(s, "\n")
 
 	// Find and remove leading fence
@@ -190,12 +173,17 @@ func sanitizeLLMOutput(s string) string {
 
 // generateGoFunctionWithLLM generates a Go function using LLM.
 func generateGoFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Function, graph *ir.SemanticGraph, provider llm.Provider) string {
+	srcLang := mod.Language
+	if srcLang == "" {
+		srcLang = "legacy"
+	}
+
 	// Build context for LLM
 	var fnCtx strings.Builder
 	fnCtx.WriteString(fmt.Sprintf("Module: %s\n", mod.Name))
 	fnCtx.WriteString(fmt.Sprintf("Function: %s\n", fn.Name))
 	if fn.Body != "" {
-		fnCtx.WriteString(fmt.Sprintf("Original Source Body:\n%s\n", fn.Body))
+		fnCtx.WriteString(fmt.Sprintf("Original %s Body:\n%s\n", srcLang, fn.Body))
 	}
 
 	// Include business rules
@@ -206,9 +194,9 @@ func generateGoFunctionWithLLM(ctx context.Context, mod *ir.Module, fn *ir.Funct
 	}
 
 	prompt := &llm.Prompt{
-		SystemPrompt: `You are a legacy-to-Go migration expert. Generate clean, idiomatic Go code.
+		SystemPrompt: fmt.Sprintf(`You are a %s to Go migration expert. Generate clean, idiomatic Go code.
 Rules:
-1. Preserve exact business logic from the original source
+1. Preserve exact business logic from the original %s source
 2. Use idiomatic Go patterns (error handling, interfaces, etc.)
 3. Add comments explaining the business logic
 4. Handle edge cases with proper error returns
@@ -216,9 +204,9 @@ Rules:
 6. CRITICAL: Use shopspring/decimal for ALL financial/monetary calculations to preserve precision
    - import "github.com/shopspring/decimal"
    - Use: decimal.NewFromString("10.50").Add(decimal.NewFromString("5.25"))
-   - Never use float64 for money`,
+   - Never use float64 for money`, srcLang, srcLang),
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this function to Go:\n\n%s", fnCtx.String())},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to Go:\n\n%s", srcLang, fnCtx.String())},
 		},
 	}
 

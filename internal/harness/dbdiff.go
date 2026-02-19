@@ -91,6 +91,12 @@ func isValidIdentifier(s string) bool {
 	return identifierRegex.MatchString(s)
 }
 
+// quoteIdentifier wraps a SQL identifier in double quotes and escapes any
+// embedded double quotes, providing defense-in-depth against SQL injection.
+func quoteIdentifier(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
 // NewDBDiffer creates a new database differ.
 func NewDBDiffer(config *DBDiffConfig) *DBDiffer {
 	d := &DBDiffer{
@@ -188,13 +194,13 @@ func (d *DBDiffer) snapshotTable(ctx context.Context, table string) (*TableSnaps
 	}
 
 	// Get row count
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s", quoteIdentifier(table))
 	if err := d.db.QueryRowContext(ctx, countQuery).Scan(&snapshot.RowCount); err != nil {
 		return nil, fmt.Errorf("count rows: %w", err)
 	}
 
 	// Get rows (limit for safety)
-	dataQuery := fmt.Sprintf("SELECT * FROM %s LIMIT 10000", table)
+	dataQuery := fmt.Sprintf("SELECT * FROM %s LIMIT 10000", quoteIdentifier(table))
 	dataRows, err := d.db.QueryContext(ctx, dataQuery)
 	if err != nil {
 		return nil, fmt.Errorf("query rows: %w", err)

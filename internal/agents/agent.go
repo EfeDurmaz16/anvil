@@ -34,12 +34,13 @@ type Agent interface {
 
 // AgentContext provides shared resources to agents.
 type AgentContext struct {
-	Graph    *ir.SemanticGraph
-	LLM      llm.Provider
-	GraphDB  graph.Repository
-	VectorDB vector.Repository
-	Registry *plugins.Registry
-	Params   map[string]string
+	Graph       *ir.SemanticGraph
+	LLM         llm.Provider
+	GraphDB     graph.Repository
+	VectorDB    vector.Repository
+	Registry    *plugins.Registry
+	Params      map[string]string
+	DefaultOpts *llm.RequestOptions // Default LLM request options (temperature, max_tokens, etc.)
 }
 
 // AgentMetrics captures performance and quality metrics.

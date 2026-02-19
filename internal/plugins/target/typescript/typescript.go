@@ -88,8 +88,14 @@ func generateServiceWithLLM(ctx context.Context, mod *ir.Module, svcName string,
 			// Build context for LLM
 			fnContext := buildFunctionContext(mod, f, graph)
 
+			// Determine source language
+			srcLang := mod.Language
+			if srcLang == "" {
+				srcLang = "legacy"
+			}
+
 			// Generate function implementation via LLM
-			impl := generateFunctionWithLLM(ctx, f, fnContext, provider)
+			impl := generateFunctionWithLLM(ctx, f, fnContext, srcLang, provider)
 
 			mu.Lock()
 			results[idx] = impl
@@ -176,28 +182,10 @@ func buildFunctionContext(mod *ir.Module, fn *ir.Function, graph *ir.SemanticGra
 	return ctx.String()
 }
 
-// stripThinkingTags removes <think>...</think> blocks from LLM output (e.g. qwen3).
-func stripThinkingTags(s string) string {
-	for {
-		start := strings.Index(s, "<think>")
-		if start == -1 {
-			break
-		}
-		end := strings.Index(s, "</think>")
-		if end == -1 {
-			// Unclosed tag: remove from <think> to end
-			s = strings.TrimSpace(s[:start])
-			break
-		}
-		s = s[:start] + s[end+len("</think>"):]
-	}
-	return strings.TrimSpace(s)
-}
-
 // stripMarkdownFences removes markdown code fences from LLM output.
 func stripMarkdownFences(s string) string {
 	// First strip thinking tags
-	s = stripThinkingTags(s)
+	s = llm.StripThinkingTags(s)
 
 	lines := strings.Split(s, "\n")
 
@@ -300,17 +288,7 @@ func sanitizeLLMOutput(s string) string {
 }
 
 // generateFunctionWithLLM generates a single function implementation using LLM.
-func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext string, provider llm.Provider) string {
-	lang := "legacy"
-	if fn.Name != "" {
-		// Extract language from module context if available
-		for _, m := range strings.Split(fnContext, "\n") {
-			if strings.HasPrefix(m, "Module: ") && strings.Contains(fnContext, "Language:") {
-				// Language is embedded in context
-				break
-			}
-		}
-	}
+func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext string, sourceLang string, provider llm.Provider) string {
 
 	// Check for Judge feedback from previous retry
 	feedbackHint := ""
@@ -355,9 +333,9 @@ Rules:
 1. Preserve the exact business logic from the original %s code
 2. Use modern TypeScript (async/await, optional chaining)
 3. Add brief inline comments for business logic
-4. Handle edge cases appropriately%s`, lang, lang, feedbackHint),
+4. Handle edge cases appropriately%s`, sourceLang, sourceLang, feedbackHint),
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to TypeScript method body:\n\n%s\n\nReturn ONLY the method body lines, no imports or function wrappers.", lang, fnContext)},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s function to TypeScript method body:\n\n%s\n\nReturn ONLY the method body lines, no imports or function wrappers.", sourceLang, fnContext)},
 		},
 	}
 
@@ -374,7 +352,7 @@ Rules:
 
 	// Wrap in method signature
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("  /**\n   * Migrated from %s: %s\n", lang, fn.Name))
+	b.WriteString(fmt.Sprintf("  /**\n   * Migrated from %s: %s\n", sourceLang, fn.Name))
 	if fn.Body != "" {
 		// Add truncated original as reference
 		orig := fn.Body

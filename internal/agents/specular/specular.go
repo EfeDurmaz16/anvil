@@ -86,7 +86,7 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 			defer wg.Done()
 			defer func() { <-sem }() // release
 
-			rules, err := extractRules(ctx, ac.LLM, j.mod.Language, j.mod.Name, j.fn)
+			rules, err := extractRules(ctx, ac.LLM, ac.DefaultOpts, j.mod.Language, j.mod.Name, j.fn)
 
 			mu.Lock()
 			result.Metrics.LLMCalls++
@@ -119,7 +119,7 @@ func (s *Specular) Run(ctx context.Context, ac *agents.AgentContext) (*agents.Ag
 	return result, nil
 }
 
-func extractRules(ctx context.Context, provider llm.Provider, sourceLang string, module string, fn *ir.Function) ([]*ir.BusinessRule, error) {
+func extractRules(ctx context.Context, provider llm.Provider, opts *llm.RequestOptions, sourceLang string, module string, fn *ir.Function) ([]*ir.BusinessRule, error) {
 	prompt := &llm.Prompt{
 		SystemPrompt: fmt.Sprintf("You are a %s business rule extraction expert. Given a function body, extract business rules as JSON array with fields: id, description, confidence (0-1), tags.", sourceLang),
 		Messages: []llm.Message{
@@ -127,7 +127,7 @@ func extractRules(ctx context.Context, provider llm.Provider, sourceLang string,
 		},
 	}
 
-	resp, err := provider.Complete(ctx, prompt, nil)
+	resp, err := provider.Complete(ctx, prompt, opts)
 	if err != nil {
 		return nil, err
 	}

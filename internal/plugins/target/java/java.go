@@ -86,50 +86,16 @@ func (p *Plugin) Scaffold(ctx context.Context, graph *ir.SemanticGraph) ([]plugi
 	}, nil
 }
 
-// stripThinkingTags removes <think>...</think> blocks from LLM output (e.g. qwen3).
-func stripThinkingTags(s string) string {
-	for {
-		start := -1
-		tag := "<think>"
-		for i := 0; i <= len(s)-len(tag); i++ {
-			if s[i:i+len(tag)] == tag {
-				start = i
-				break
-			}
-		}
-		if start == -1 {
-			break
-		}
-		endTag := "</think>"
-		end := -1
-		for i := start; i <= len(s)-len(endTag); i++ {
-			if s[i:i+len(endTag)] == endTag {
-				end = i
-				break
-			}
-		}
-		if end == -1 {
-			s = trimSpace(s[:start])
-			break
-		}
-		s = s[:start] + s[end+len(endTag):]
-	}
-	return trimSpace(s)
-}
-
 // stripMarkdownFences removes markdown code fences from LLM output.
 func stripMarkdownFences(s string) string {
-	s = stripThinkingTags(s)
-	lines := make([]string, 0)
-	for _, line := range splitLines(s) {
-		lines = append(lines, line)
-	}
+	s = llm.StripThinkingTags(s)
+	lines := strings.Split(s, "\n")
 
 	// Find and remove leading fence
 	start := 0
 	for i, line := range lines {
-		trimmed := trimSpace(line)
-		if hasPrefix(trimmed, "```") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "```") {
 			start = i + 1
 			break
 		}
@@ -138,8 +104,8 @@ func stripMarkdownFences(s string) string {
 	// Find and remove trailing fence
 	end := len(lines)
 	for i := len(lines) - 1; i >= start; i-- {
-		trimmed := trimSpace(lines[i])
-		if hasPrefix(trimmed, "```") {
+		trimmed := strings.TrimSpace(lines[i])
+		if strings.HasPrefix(trimmed, "```") {
 			end = i
 			break
 		}
@@ -150,62 +116,25 @@ func stripMarkdownFences(s string) string {
 		return s
 	}
 
-	return joinLines(lines[start:end])
-}
-
-func splitLines(s string) []string {
-	result := []string{}
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			result = append(result, s[start:i])
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		result = append(result, s[start:])
-	}
-	return result
-}
-
-func joinLines(lines []string) string {
-	result := ""
-	for i, line := range lines {
-		if i > 0 {
-			result += "\n"
-		}
-		result += line
-	}
-	return result
-}
-
-func trimSpace(s string) string {
-	start := 0
-	end := len(s)
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
-		start++
-	}
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
-		end--
-	}
-	return s[start:end]
-}
-
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+	return strings.Join(lines[start:end], "\n")
 }
 
 func generateWithLLM(ctx context.Context, provider llm.Provider, mod *ir.Module, className string, graph *ir.SemanticGraph) (string, error) {
+	srcLang := mod.Language
+	if srcLang == "" {
+		srcLang = "legacy"
+	}
+
 	moduleCtx := buildModuleContext(mod, className, graph)
 
 	prompt := &llm.Prompt{
-		SystemPrompt: `You are a legacy-to-Java Spring Boot migration expert.
+		SystemPrompt: fmt.Sprintf(`You are a %s to Java Spring Boot migration expert.
 
 CRITICAL OUTPUT FORMAT RULES:
 - Output a complete, compilable Java class including the package declaration and all imports
 - Annotate the class with @Service (default), or @RestController if it handles HTTP, or @Repository if it handles persistence
 - Use @Autowired for dependency injection where applicable
-- Preserve all business logic from the original source code exactly
+- Preserve all business logic from the original %s source code exactly
 - Add brief Javadoc comments for each method explaining its business purpose
 - Do NOT wrap the output in markdown code fences
 - Do NOT include any explanation or prose outside the Java source
@@ -216,9 +145,9 @@ Spring Boot annotation guidance:
 - @Repository: database access classes
 - @Autowired: inject dependencies
 - @Transactional: methods that modify persistent state
-- Use BigDecimal for decimal arithmetic to preserve precision`,
+- Use BigDecimal for decimal arithmetic to preserve precision`, srcLang, srcLang),
 		Messages: []llm.Message{
-			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this legacy module to a Java Spring Boot class:\n\n%s", moduleCtx)},
+			{Role: llm.RoleUser, Content: fmt.Sprintf("Convert this %s module to a Java Spring Boot class:\n\n%s", srcLang, moduleCtx)},
 		},
 	}
 	resp, err := provider.Complete(ctx, prompt, nil)
@@ -232,11 +161,16 @@ Spring Boot annotation guidance:
 // buildModuleContext assembles a rich context string for the LLM including
 // function bodies, business rules, data types, and parameter information.
 func buildModuleContext(mod *ir.Module, className string, graph *ir.SemanticGraph) string {
+	srcLang := mod.Language
+	if srcLang == "" {
+		srcLang = "legacy"
+	}
+
 	var b strings.Builder
 
 	b.WriteString(fmt.Sprintf("Module: %s\n", mod.Name))
 	b.WriteString(fmt.Sprintf("Target class name: %s\n", className))
-	b.WriteString(fmt.Sprintf("Source language: %s\n", mod.Language))
+	b.WriteString(fmt.Sprintf("Source language: %s\n", srcLang))
 
 	// IO contracts hint for annotation selection
 	if len(mod.IOContracts) > 0 {
@@ -314,7 +248,7 @@ func buildModuleContext(mod *ir.Module, className string, graph *ir.SemanticGrap
 		}
 
 		if fn.Body != "" {
-			b.WriteString(fmt.Sprintf("Original %s body:\n%s\n", mod.Language, fn.Body))
+			b.WriteString(fmt.Sprintf("Original %s body:\n%s\n", srcLang, fn.Body))
 		} else {
 			b.WriteString("(no body available)\n")
 		}
@@ -417,15 +351,4 @@ func describeDataType(dt *ir.DataType) string {
 	default:
 		return "unknown"
 	}
-}
-
-func joinStrings(s []string, sep string) string {
-	result := ""
-	for i, v := range s {
-		if i > 0 {
-			result += sep
-		}
-		result += v
-	}
-	return result
 }

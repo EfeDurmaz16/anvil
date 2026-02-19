@@ -290,7 +290,7 @@ func TestVerifyFunctionCleanJSON(t *testing.T) {
 		content: `{"equivalent": true, "reason": "Logic preserved"}`,
 	}
 
-	ok, reason, err := verifyFunction(context.Background(), mockLLM, "cobol", "java", "M", "F", "MOVE A TO B.", "a = b;")
+	ok, reason, err := verifyFunction(context.Background(), mockLLM, nil, "cobol", "java", "M", "F", "MOVE A TO B.", "a = b;")
 
 	if err != nil {
 		t.Fatal(err)

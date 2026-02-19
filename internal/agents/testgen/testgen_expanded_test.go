@@ -415,7 +415,7 @@ func TestGenerateTestFileWithMockLLM(t *testing.T) {
 		content: "import { test } from 'framework';\n\ntest('adds numbers', () => {\n  expect(true).toBe(true);\n});",
 	}
 
-	testFile := generateTestFile(context.Background(), mod, fn, "typescript", mockLLM)
+	testFile := generateTestFile(context.Background(), mod, fn, "typescript", mockLLM, nil)
 
 	if testFile == nil {
 		t.Fatal("generateTestFile() returned nil")
@@ -436,7 +436,7 @@ func TestGenerateTestFileWithNilLLM(t *testing.T) {
 		Name: "ADD-NUMBERS",
 	}
 
-	testFile := generateTestFile(context.Background(), mod, fn, "typescript", nil)
+	testFile := generateTestFile(context.Background(), mod, fn, "typescript", nil, nil)
 
 	if testFile != nil {
 		t.Error("generateTestFile() with nil LLM should return nil")

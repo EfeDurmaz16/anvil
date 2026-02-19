@@ -87,8 +87,8 @@ type LogConfig struct {
 func (c *Config) Validate() []string {
 	var warnings []string
 
-	// Check for empty API key with active provider
-	if c.LLM.Provider != "" && c.LLM.APIKey == "" {
+	// Check for empty API key with active provider (skip "none" provider)
+	if c.LLM.Provider != "" && c.LLM.Provider != "none" && c.LLM.APIKey == "" {
 		warnings = append(warnings, fmt.Sprintf("LLM provider '%s' is configured but api_key is empty", c.LLM.Provider))
 	}
 
