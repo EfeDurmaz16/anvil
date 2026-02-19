@@ -22,6 +22,7 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/config"
 	"github.com/efebarandurmaz/anvil/internal/dashboard"
 	"github.com/efebarandurmaz/anvil/internal/harness"
+	"github.com/efebarandurmaz/anvil/internal/proofexplorer"
 	"github.com/efebarandurmaz/anvil/internal/llm"
 	"github.com/efebarandurmaz/anvil/internal/llmutil"
 	"github.com/efebarandurmaz/anvil/internal/metrics"
@@ -230,6 +231,27 @@ func main() {
 	dashboardCmd.Flags().IntVarP(&dashboardPort, "port", "p", 9090, "Dashboard listen port")
 	dashboardCmd.Flags().BoolVar(&dashboardDemo, "demo", false, "Seed with demo migration data")
 
+	// Explore command
+	var (
+		explorePort int
+		exploreDirs []string
+		exploreOpen bool
+	)
+	exploreCmd := &cobra.Command{
+		Use:   "explore [dirs...]",
+		Short: "Start the Proof Pack Explorer server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Use args as dirs if provided, otherwise use flag value
+			if len(args) > 0 {
+				exploreDirs = args
+			}
+			return runExplore(explorePort, exploreDirs, exploreOpen)
+		},
+	}
+	exploreCmd.Flags().IntVarP(&explorePort, "port", "p", 9091, "Explorer listen port")
+	exploreCmd.Flags().StringSliceVar(&exploreDirs, "dirs", []string{"."}, "Directories to scan for proof packs")
+	exploreCmd.Flags().BoolVarP(&exploreOpen, "open", "o", false, "Print URL (reserved for future auto-open)")
+
 	// Review command
 	var (
 		reviewSource         string
@@ -374,7 +396,7 @@ func main() {
 
 	gateCmd.AddCommand(gateCheckCmd, gateDefaultsCmd)
 
-	rootCmd.AddCommand(runCmd, providersCmd, harnessCmd, proofPackCmd, dashboardCmd, reviewCmd, snapshotCmd, gateCmd)
+	rootCmd.AddCommand(runCmd, providersCmd, harnessCmd, proofPackCmd, dashboardCmd, exploreCmd, reviewCmd, snapshotCmd, gateCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
@@ -1066,6 +1088,51 @@ func runDashboard(port int, demo bool) error {
 		shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		return server.Stop(shutdownCtx)
+	}
+}
+
+// runExplore starts the proof pack explorer server.
+func runExplore(port int, dirs []string, open bool) error {
+	ctx := context.Background()
+
+	// Create explorer config
+	config := &proofexplorer.Config{
+		ListenAddr: fmt.Sprintf(":%d", port),
+		PackDirs:   dirs,
+	}
+
+	// Create explorer
+	explorer, err := proofexplorer.New(config)
+	if err != nil {
+		return fmt.Errorf("create explorer: %w", err)
+	}
+
+	// Handle graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	errChan := make(chan error, 1)
+	go func() {
+		errChan <- explorer.Start()
+	}()
+
+	fmt.Printf("\nAnvil Proof Pack Explorer\n")
+	fmt.Printf("  Server running at: http://localhost:%d\n", port)
+	fmt.Printf("  Scanning directories: %v\n", dirs)
+	fmt.Printf("  Found %d proof packs\n", explorer.PackCount())
+	if open {
+		fmt.Printf("\n  Open in browser: http://localhost:%d\n", port)
+	}
+	fmt.Printf("\nPress Ctrl+C to stop.\n\n")
+
+	select {
+	case err := <-errChan:
+		return err
+	case <-sigChan:
+		slog.Info("Shutdown signal received")
+		shutdownCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		return explorer.Stop(shutdownCtx)
 	}
 }
 

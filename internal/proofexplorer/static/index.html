@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Proof Pack Explorer</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;background:#0d1117;color:#c9d1d9;line-height:1.6;padding:20px}
+        .container{max-width:1400px;margin:0 auto}
+        h1{font-size:32px;font-weight:600;color:#f0f6fc;margin-bottom:10px}
+        .subtitle{color:#8b949e;font-size:16px;margin-bottom:30px}
+        .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin-bottom:30px}
+        .stat-card{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:20px}
+        .stat-value{font-size:32px;font-weight:600;color:#58a6ff;margin-bottom:5px}
+        .stat-value.pass{color:#3fb950}.stat-value.fail{color:#f85149}
+        .stat-label{color:#8b949e;font-size:14px}
+        .controls{display:flex;gap:15px;margin-bottom:20px;flex-wrap:wrap}
+        .search-box{flex:1;min-width:250px}
+        .search-box input{width:100%;padding:10px 15px;background:#161b22;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:14px}
+        .search-box input:focus{outline:none;border-color:#58a6ff}
+        .filter-buttons{display:flex;gap:10px}
+        .btn{padding:10px 16px;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s}
+        .btn:hover{background:#30363d;border-color:#8b949e}
+        .btn.active{background:#58a6ff;border-color:#58a6ff;color:#0d1117}
+        .btn-rescan{background:#238636;border-color:#238636}.btn-rescan:hover{background:#2ea043}
+        .pack-list{display:grid;gap:15px}
+        .pack-card{background:#161b22;border:1px solid #30363d;border-radius:6px;overflow:hidden;transition:border-color .2s}
+        .pack-card:hover{border-color:#8b949e}.pack-card.expanded{border-color:#58a6ff}
+        .pack-header{padding:20px;cursor:pointer;display:grid;grid-template-columns:auto 1fr auto auto;gap:20px;align-items:center}
+        .pack-dot{width:12px;height:12px;border-radius:50%;background:#3fb950}.pack-dot.fail{background:#f85149}
+        .pack-title{font-size:16px;font-weight:600;color:#f0f6fc;margin-bottom:5px}
+        .pack-meta{display:flex;gap:20px;font-size:13px;color:#8b949e;flex-wrap:wrap}
+        .pack-stats{display:flex;gap:15px}
+        .pack-stat{text-align:center}
+        .pack-stat-value{font-size:20px;font-weight:600}
+        .pack-stat-value.pass{color:#3fb950}.pack-stat-value.fail{color:#f85149}
+        .pack-stat-label{font-size:12px;color:#8b949e}
+        .pack-details{display:none;border-top:1px solid #30363d;padding:20px;background:#0d1117}
+        .pack-card.expanded .pack-details{display:block}
+        .fixtures-table{width:100%;border-collapse:collapse}
+        .fixtures-table th{text-align:left;padding:12px;background:#161b22;color:#8b949e;font-size:13px;font-weight:600;border-bottom:1px solid #30363d}
+        .fixtures-table td{padding:12px;border-bottom:1px solid #21262d;font-size:14px}
+        .fixtures-table tr:hover{background:#161b22}
+        .fixture-row.pass{border-left:3px solid #3fb950}.fixture-row.fail{border-left:3px solid #f85149}
+        .badge{display:inline-block;padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600}
+        .badge.pass{background:#1f6e3f;color:#3fb950}.badge.fail{background:#6e1f25;color:#f85149}.badge.kind{background:#1f2f5f;color:#58a6ff}
+        .empty-state{text-align:center;padding:60px 20px;color:#8b949e}
+        .empty-state h2{font-size:24px;margin-bottom:10px;color:#c9d1d9}
+        .loading{text-align:center;padding:40px;color:#8b949e}
+        .expand-icon{color:#8b949e;transition:transform .2s}.pack-card.expanded .expand-icon{transform:rotate(90deg)}
+        .truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:300px}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Proof Pack Explorer</h1>
+    <p class="subtitle">Browse test evidence bundles</p>
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card"><div class="stat-value" id="totalPacks">-</div><div class="stat-label">Total Packs</div></div>
+        <div class="stat-card"><div class="stat-value" id="totalFixtures">-</div><div class="stat-label">Total Fixtures</div></div>
+        <div class="stat-card"><div class="stat-value pass" id="totalPassed">-</div><div class="stat-label">Passed</div></div>
+        <div class="stat-card"><div class="stat-value fail" id="totalFailed">-</div><div class="stat-label">Failed</div></div>
+        <div class="stat-card"><div class="stat-value" id="passRate">-</div><div class="stat-label">Pass Rate</div></div>
+        <div class="stat-card"><div class="stat-value" id="avgFixtures">-</div><div class="stat-label">Avg Fixtures/Pack</div></div>
+    </div>
+    <div class="controls">
+        <div class="search-box"><input type="text" id="searchInput" placeholder="Search proof packs..."></div>
+        <div class="filter-buttons">
+            <button class="btn active" data-filter="all">All</button>
+            <button class="btn" data-filter="pass">Passed</button>
+            <button class="btn" data-filter="fail">Failed</button>
+        </div>
+        <button class="btn btn-rescan" id="rescanBtn">Rescan</button>
+    </div>
+    <div id="packList" class="pack-list"><div class="loading">Loading proof packs...</div></div>
+</div>
+<script>
+let allPacks=[],currentFilter='all',searchQuery='',expandedPacks=new Set();
+
+async function fetchStats(){
+    try{
+        const r=await fetch('/api/stats');const s=await r.json();
+        document.getElementById('totalPacks').textContent=s.total_packs||0;
+        document.getElementById('totalFixtures').textContent=s.total_fixtures||0;
+        document.getElementById('totalPassed').textContent=s.total_passed||0;
+        document.getElementById('totalFailed').textContent=s.total_failed||0;
+        document.getElementById('passRate').textContent=((s.overall_pass_rate||0)*100).toFixed(1)+'%';
+        document.getElementById('avgFixtures').textContent=(s.avg_fixtures_per_pack||0).toFixed(1);
+    }catch(e){console.error('Stats fetch failed:',e)}
+}
+
+async function fetchPacks(){
+    try{const r=await fetch('/api/packs');allPacks=await r.json();renderPacks()}
+    catch(e){console.error('Packs fetch failed:',e);showEmpty('packList','Failed to load proof packs','')}
+}
+
+function showEmpty(id,title,sub){
+    const el=document.getElementById(id);el.textContent='';
+    const d=document.createElement('div');d.className='empty-state';
+    const h=document.createElement('h2');h.textContent=title;d.appendChild(h);
+    if(sub){const p=document.createElement('p');p.textContent=sub;d.appendChild(p)}
+    el.appendChild(d);
+}
+
+function filterPacks(){
+    let f=allPacks;
+    if(currentFilter==='pass')f=f.filter(p=>p.pass);
+    else if(currentFilter==='fail')f=f.filter(p=>!p.pass);
+    if(searchQuery){const q=searchQuery.toLowerCase();f=f.filter(p=>p.dir.toLowerCase().includes(q)||p.id.toLowerCase().includes(q))}
+    return f;
+}
+
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e}
+
+function renderPacks(){
+    const list=document.getElementById('packList');list.textContent='';
+    const filtered=filterPacks();
+    if(!filtered.length){showEmpty('packList','No proof packs found','Try adjusting your filters or search query');return}
+    filtered.forEach(p=>{
+        const card=el('div','pack-card'+(expandedPacks.has(p.id)?' expanded':''));
+        card.dataset.packId=p.id;
+        const hdr=el('div','pack-header');hdr.onclick=()=>togglePack(p.id);
+        hdr.appendChild(el('div','pack-dot'+(p.pass?'':' fail')));
+        const info=el('div','pack-info');
+        info.appendChild(el('div','pack-title',p.dir));
+        const meta=el('div','pack-meta');
+        meta.appendChild(el('span','','ID: '+p.id));
+        meta.appendChild(el('span','','Duration: '+p.duration));
+        meta.appendChild(el('span','','Started: '+new Date(p.started_at).toLocaleString()));
+        info.appendChild(meta);hdr.appendChild(info);
+        const stats=el('div','pack-stats');
+        stats.appendChild(makeStat(p.fixture_count,'Fixtures',''));
+        stats.appendChild(makeStat(p.pass_count,'Pass','pass'));
+        stats.appendChild(makeStat(p.fail_count,'Fail','fail'));
+        hdr.appendChild(stats);
+        hdr.appendChild(el('div','expand-icon','\u25B6'));
+        card.appendChild(hdr);
+        const det=el('div','pack-details');det.id='details-'+p.id;
+        det.appendChild(el('div','loading','Loading fixtures...'));
+        card.appendChild(det);list.appendChild(card);
+    });
+}
+
+function makeStat(val,label,type){
+    const s=el('div','pack-stat');
+    s.appendChild(el('div','pack-stat-value'+(type?' '+type:''),String(val)));
+    s.appendChild(el('div','pack-stat-label',label));return s;
+}
+
+async function togglePack(id){
+    const card=document.querySelector('[data-pack-id="'+id+'"]');
+    const det=document.getElementById('details-'+id);
+    if(expandedPacks.has(id)){expandedPacks.delete(id);card.classList.remove('expanded');return}
+    expandedPacks.add(id);card.classList.add('expanded');
+    if(det.querySelector('.loading')){
+        try{const r=await fetch('/api/packs/'+id);const d=await r.json();renderFixtures(id,d.results||[])}
+        catch(e){det.textContent='';det.appendChild(el('div','empty-state','Failed to load fixtures'))}
+    }
+}
+
+function renderFixtures(id,fixtures){
+    const det=document.getElementById('details-'+id);det.textContent='';
+    if(!fixtures.length){det.appendChild(el('div','empty-state','No fixtures'));return}
+    const tbl=el('table','fixtures-table');
+    const thead=el('thead');const hr=el('tr');
+    ['Status','Name','Kind','Diff Kind','Reason'].forEach(t=>hr.appendChild(el('th','',t)));
+    thead.appendChild(hr);tbl.appendChild(thead);
+    const tbody=el('tbody');
+    fixtures.forEach(f=>{
+        const tr=el('tr','fixture-row '+(f.pass?'pass':'fail'));
+        const std=el('td');const b=el('span','badge '+(f.pass?'pass':'fail'),f.pass?'PASS':'FAIL');
+        std.appendChild(b);tr.appendChild(std);
+        const ntd=el('td');const nd=el('div','truncate',f.name);nd.title=f.name;ntd.appendChild(nd);tr.appendChild(ntd);
+        const ktd=el('td');ktd.appendChild(el('span','badge kind',f.kind));tr.appendChild(ktd);
+        tr.appendChild(el('td','',f.diff_kind||''));
+        const rtd=el('td');const rd=el('div','truncate',f.diff_reason||'-');rd.title=f.diff_reason||'-';rtd.appendChild(rd);tr.appendChild(rtd);
+        tbody.appendChild(tr);
+    });
+    tbl.appendChild(tbody);det.appendChild(tbl);
+}
+
+async function rescan(){
+    const btn=document.getElementById('rescanBtn');btn.textContent='Rescanning...';btn.disabled=true;
+    try{const r=await fetch('/api/rescan',{method:'POST'});const d=await r.json();
+        expandedPacks.clear();await Promise.all([fetchStats(),fetchPacks()]);
+        btn.textContent='Rescan ('+d.pack_count+')';setTimeout(()=>btn.textContent='Rescan',2000)}
+    catch(e){btn.textContent='Rescan Failed';setTimeout(()=>btn.textContent='Rescan',2000)}
+    finally{btn.disabled=false}
+}
+
+document.getElementById('searchInput').addEventListener('input',e=>{searchQuery=e.target.value;renderPacks()});
+document.querySelectorAll('.filter-buttons .btn').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.filter-buttons .btn').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');currentFilter=b.dataset.filter;renderPacks();
+}));
+document.getElementById('rescanBtn').addEventListener('click',rescan);
+Promise.all([fetchStats(),fetchPacks()]);
+</script>
+</body>
+</html>
