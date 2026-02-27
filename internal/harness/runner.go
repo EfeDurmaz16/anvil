@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -141,7 +142,85 @@ func (r *ManifestRunner) RunFixture(ctx context.Context, projectDir string, fixt
 
 func (r *ManifestRunner) Cleanup() error { return nil }
 
+// envWhitelist contains safe environment variable prefixes/names for child processes.
+var envWhitelist = map[string]bool{
+	"PATH": true, "HOME": true, "USER": true, "TMPDIR": true,
+	"LANG": true, "LC_ALL": true, "LC_CTYPE": true,
+	"GOPATH": true, "GOROOT": true, "GOMODCACHE": true,
+	"JAVA_HOME": true, "PYTHONPATH": true, "NODE_PATH": true,
+	"TERM": true, "SHELL": true,
+}
+
+// sensitivePatterns are substrings that indicate a sensitive env var.
+var sensitivePatterns = []string{"API_KEY", "SECRET", "TOKEN", "PASSWORD", "CREDENTIAL"}
+
+func filterEnv() []string {
+	var filtered []string
+	for _, entry := range os.Environ() {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		upperKey := strings.ToUpper(key)
+
+		// Block ANVIL_ internal vars
+		if strings.HasPrefix(upperKey, "ANVIL_") {
+			continue
+		}
+
+		// Block sensitive patterns
+		sensitive := false
+		for _, pat := range sensitivePatterns {
+			if strings.Contains(upperKey, pat) {
+				sensitive = true
+				break
+			}
+		}
+		if sensitive {
+			continue
+		}
+
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}
+
+// allowedCommands is the whitelist of permitted command base names.
+var allowedCommands = map[string]bool{
+	"node": true, "npx": true, "tsc": true,
+	"python": true, "python3": true,
+	"go":     true,
+	"javac": true, "mvn": true, "gradle": true,
+	"npm": true, "pip": true,
+}
+
+// validateCommand checks that the command is in the whitelist, is not an
+// absolute path, and that the working directory does not contain "..".
+func validateCommand(c Command) error {
+	// Reject absolute paths in command
+	if filepath.IsAbs(c.Cmd) {
+		return fmt.Errorf("absolute command paths not allowed: %q", c.Cmd)
+	}
+
+	// Check command base name against whitelist
+	base := filepath.Base(c.Cmd)
+	if !allowedCommands[base] {
+		return fmt.Errorf("command %q not in allowed list", c.Cmd)
+	}
+
+	// Reject ".." in working directory
+	if c.Dir != "" && strings.Contains(filepath.Clean(c.Dir), "..") {
+		return fmt.Errorf("directory traversal not allowed in Dir: %q", c.Dir)
+	}
+
+	return nil
+}
+
 func (r *ManifestRunner) exec(ctx context.Context, projectDir string, c Command, stdin []byte) ([]byte, []byte, error) {
+	if err := validateCommand(c); err != nil {
+		return nil, nil, err
+	}
+
 	timeout := r.cfg.Timeout
 	if timeout <= 0 {
 		timeout = 5 * time.Minute
@@ -155,7 +234,7 @@ func (r *ManifestRunner) exec(ctx context.Context, projectDir string, c Command,
 		cmd.Dir = filepath.Join(projectDir, c.Dir)
 	}
 
-	env := os.Environ()
+	env := filterEnv()
 	for k, v := range r.cfg.Env {
 		env = append(env, fmt.Sprintf("%s=%s", k, v))
 	}
