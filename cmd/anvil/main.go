@@ -137,46 +137,13 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 	registry := plugins.NewRegistry()
 	plugindefaults.RegisterAllDefaults(registry)
 
-	// Build LLM provider via factory
+	// Build LLM providers (default + per-agent overrides with rate limiting).
 	factory := llm.NewFactory()
 	llmutil.RegisterDefaultProviders(factory)
 
-	// Helper to create a provider from an LLM config (with rate limiting).
-	makeProvider := func(lcfg config.LLMConfig, label string) (llm.Provider, error) {
-		p, err := factory.Create(llm.ProviderConfig{
-			Provider: lcfg.Provider,
-			APIKey:   lcfg.APIKey,
-			Model:    lcfg.Model,
-			BaseURL:  lcfg.BaseURL,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("creating LLM provider for %s: %w", label, err)
-		}
-		if p != nil {
-			p = llm.WithRateLimit(p, llm.DefaultRateLimitConfig())
-		}
-		return p, nil
-	}
-
-	// Default provider
-	provider, err := makeProvider(cfg.LLM, "default")
+	providers, err := llm.SetupProviders(cfg.LLM, factory)
 	if err != nil {
-		return fmt.Errorf("creating LLM provider: %w", err)
-	}
-
-	// Build providers map for the pipeline
-	providers := map[string]llm.Provider{"default": provider}
-
-	// Per-agent provider overrides
-	if len(cfg.LLM.Agents) > 0 {
-		for agentName := range cfg.LLM.Agents {
-			resolved := cfg.LLM.ResolveForAgent(agentName)
-			agentProv, err := makeProvider(resolved, agentName)
-			if err != nil {
-				return fmt.Errorf("creating LLM provider for agent %s: %w", agentName, err)
-			}
-			providers[agentName] = agentProv
-		}
+		return fmt.Errorf("setting up LLM providers: %w", err)
 	}
 
 	ctx := context.Background()

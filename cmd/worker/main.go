@@ -55,26 +55,18 @@ func main() {
 	registry := plugins.NewRegistry()
 	plugindefaults.RegisterAllDefaults(registry)
 
-	// Build LLM provider via factory (supports on-prem/no-LLM operation).
+	// Build LLM providers (default + per-agent overrides with rate limiting).
 	factory := llm.NewFactory()
 	llmutil.RegisterDefaultProviders(factory)
 
-	provider, err := factory.Create(llm.ProviderConfig{
-		Provider: cfg.LLM.Provider,
-		APIKey:   cfg.LLM.APIKey,
-		Model:    cfg.LLM.Model,
-		BaseURL:  cfg.LLM.BaseURL,
-	})
+	providers, err := llm.SetupProviders(cfg.LLM, factory)
 	if err != nil {
-		slog.Error("failed to create LLM provider", "error", err)
+		slog.Error("failed to setup LLM providers", "error", err)
 		os.Exit(1)
 	}
 
-	// Wire rate limiter before SetDependencies.
-	provider = llm.WithRateLimit(provider, llm.DefaultRateLimitConfig())
-
 	temporalmod.SetDependencies(&temporalmod.Dependencies{
-		LLM:      agents.AgentContext{LLM: provider},
+		LLM:      agents.AgentContext{LLM: providers["default"]},
 		Registry: registry,
 	})
 
