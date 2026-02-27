@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -185,7 +186,7 @@ func (d *PIIDetector) detectInValue(field string, value any, matches *[]PIIMatch
 		for i, item := range v {
 			fieldPath := field
 			if field != "" {
-				fieldPath = field + "[" + string(rune('0'+i)) + "]"
+				fieldPath = field + "[" + strconv.Itoa(i) + "]"
 			}
 			d.detectInValue(fieldPath, item, matches)
 		}
@@ -216,7 +217,7 @@ func (d *PIIDetector) maskValue(field string, value any, matches *[]PIIMatch) an
 		for i, item := range v {
 			fieldPath := field
 			if field != "" {
-				fieldPath = field + "[" + string(rune('0'+i)) + "]"
+				fieldPath = field + "[" + strconv.Itoa(i) + "]"
 			}
 			result[i] = d.maskValue(fieldPath, item, matches)
 		}
