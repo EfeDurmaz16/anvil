@@ -3,7 +3,10 @@ package observability
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -15,6 +18,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/grpc/credentials"
 )
 
 const (
@@ -71,11 +75,37 @@ func InitTracing(ctx context.Context, cfg *TracingConfig) (*TracerProvider, erro
 		}, nil
 	}
 
-	// Create OTLP exporter
-	exporter, err := otlptracegrpc.New(ctx,
+	// Build OTLP exporter options.
+	// TLS behavior is controlled by environment variables:
+	//   ANVIL_OTLP_INSECURE=true   — disable TLS (useful for local collectors)
+	//   ANVIL_OTLP_TLS_CERT / ANVIL_OTLP_TLS_KEY — paths to client cert/key for mTLS
+	// Default (ANVIL_OTLP_INSECURE unset or false) is TLS-enabled, which is
+	// safe for production endpoints such as Grafana Cloud or Honeycomb.
+	exporterOpts := []otlptracegrpc.Option{
 		otlptracegrpc.WithEndpoint(cfg.OTLPEndpoint),
-		otlptracegrpc.WithInsecure(), // Use TLS in production
-	)
+	}
+	if os.Getenv("ANVIL_OTLP_INSECURE") == "true" {
+		exporterOpts = append(exporterOpts, otlptracegrpc.WithInsecure())
+	} else {
+		tlsCfg := &tls.Config{MinVersion: tls.VersionTLS12}
+		certFile := os.Getenv("ANVIL_OTLP_TLS_CERT")
+		keyFile := os.Getenv("ANVIL_OTLP_TLS_KEY")
+		if certFile != "" && keyFile != "" {
+			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return nil, fmt.Errorf("load OTLP TLS cert/key: %w", err)
+			}
+			tlsCfg.Certificates = []tls.Certificate{cert}
+		}
+		// Include system root CAs for server certificate verification.
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			pool = x509.NewCertPool()
+		}
+		tlsCfg.RootCAs = pool
+		exporterOpts = append(exporterOpts, otlptracegrpc.WithTLSCredentials(credentials.NewTLS(tlsCfg)))
+	}
+	exporter, err := otlptracegrpc.New(ctx, exporterOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create OTLP exporter: %w", err)
 	}
