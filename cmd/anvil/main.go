@@ -17,20 +17,16 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/agents/architect"
 	"github.com/efebarandurmaz/anvil/internal/agents/cartographer"
 	"github.com/efebarandurmaz/anvil/internal/agents/judge"
-	"github.com/efebarandurmaz/anvil/internal/agents/specular"
-	"github.com/efebarandurmaz/anvil/internal/agents/testgen"
 	"github.com/efebarandurmaz/anvil/internal/config"
-	"github.com/efebarandurmaz/anvil/internal/fileutil"
 	"github.com/efebarandurmaz/anvil/internal/dashboard"
+	"github.com/efebarandurmaz/anvil/internal/pipeline"
 	"github.com/efebarandurmaz/anvil/internal/depgraph"
 	"github.com/efebarandurmaz/anvil/internal/harness"
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/proofexplorer"
 	"github.com/efebarandurmaz/anvil/internal/llm"
 	"github.com/efebarandurmaz/anvil/internal/llmutil"
-	"github.com/efebarandurmaz/anvil/internal/metrics"
 	"github.com/efebarandurmaz/anvil/internal/migration"
-	"github.com/efebarandurmaz/anvil/internal/observability"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 	plugindefaults "github.com/efebarandurmaz/anvil/internal/plugins/defaults"
 	"github.com/efebarandurmaz/anvil/internal/qualitygate"
@@ -494,54 +490,6 @@ func main() {
 }
 
 func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath string, jsonReport bool) error {
-	// Common aliases for convenience.
-	switch targetLang {
-	case "ts":
-		targetLang = "typescript"
-	case "py":
-		targetLang = "python"
-	case "golang":
-		targetLang = "go"
-	}
-
-	// Initialize tracing. No endpoint means no-op tracer; set ANVIL_OTLP_ENDPOINT to enable.
-	tracingCfg := observability.DefaultTracingConfig()
-	if ep := os.Getenv("ANVIL_OTLP_ENDPOINT"); ep != "" {
-		tracingCfg.OTLPEndpoint = ep
-	}
-	ctx := context.Background()
-	tp, err := observability.InitTracing(ctx, tracingCfg)
-	if err != nil {
-		slog.Warn("tracing init failed, continuing without tracing", "error", err)
-	} else {
-		defer func() {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if shutdownErr := tp.Shutdown(shutdownCtx); shutdownErr != nil {
-				slog.Warn("tracing shutdown error", "error", shutdownErr)
-			}
-		}()
-	}
-
-	// Initialize audit logger. Disabled by default unless ANVIL_AUDIT_LOG is set.
-	auditCfg := &observability.AuditConfig{Enabled: false}
-	if auditPath := os.Getenv("ANVIL_AUDIT_LOG"); auditPath != "" {
-		auditCfg = &observability.AuditConfig{
-			Enabled:    true,
-			OutputPath: auditPath,
-		}
-	}
-	if err := observability.InitGlobalAuditLogger(auditCfg); err != nil {
-		slog.Warn("audit logger init failed", "error", err)
-	}
-
-	// Workflow ID for audit correlation.
-	workflowID := fmt.Sprintf("workflow-%d", time.Now().UnixNano())
-	observability.Audit().LogWorkflowStart(ctx, workflowID, sourceLang, targetLang, inputPath)
-	pipelineStart := time.Now()
-
-	m := metrics.New()
-
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		slog.Warn("config load failed, using defaults", "error", err)
@@ -551,17 +499,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 	// Reconfigure logger with config values
 	configureLoggerFromEnv(cfg.Log.Level, cfg.Log.Format)
 
-	// Build default LLM request options from config
-	defaultOpts := &llm.RequestOptions{}
-	if cfg.LLM.Temperature > 0 {
-		temp := cfg.LLM.Temperature
-		defaultOpts.Temperature = &temp
-	}
-	if cfg.LLM.MaxTokens > 0 {
-		maxTok := cfg.LLM.MaxTokens
-		defaultOpts.MaxTokens = &maxTok
-	}
-
+	// Register plugins
 	registry := plugins.NewRegistry()
 	plugindefaults.RegisterAllDefaults(registry)
 
@@ -586,17 +524,16 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 		return p, nil
 	}
 
-	// Default provider (used by agents without overrides)
+	// Default provider
 	provider, err := makeProvider(cfg.LLM, "default")
 	if err != nil {
 		return fmt.Errorf("creating LLM provider: %w", err)
 	}
 
-	// Per-agent providers (resolved from config overrides)
-	specularProvider := provider
-	architectProvider := provider
-	judgeProvider := provider
+	// Build providers map for the pipeline
+	providers := map[string]llm.Provider{"default": provider}
 
+	// Per-agent provider overrides
 	if len(cfg.LLM.Agents) > 0 {
 		for agentName := range cfg.LLM.Agents {
 			resolved := cfg.LLM.ResolveForAgent(agentName)
@@ -604,277 +541,22 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 			if err != nil {
 				return fmt.Errorf("creating LLM provider for agent %s: %w", agentName, err)
 			}
-			switch agentName {
-			case "specular":
-				specularProvider = agentProv
-			case "architect":
-				architectProvider = agentProv
-			case "judge":
-				judgeProvider = agentProv
-			}
+			providers[agentName] = agentProv
 		}
 	}
 
-	if provider == nil {
-		m.LLMMode = "passthrough"
-		slog.Info("running without LLM (template-only mode)")
-	} else {
-		m.LLMMode = "llm:" + provider.Name()
-		slog.Info("LLM provider selected", "provider", provider.Name())
-		if len(cfg.LLM.Agents) > 0 {
-			for name := range cfg.LLM.Agents {
-				resolved := cfg.LLM.ResolveForAgent(name)
-				slog.Info("agent provider override", "agent", name, "provider", resolved.Provider, "model", resolved.Model)
-			}
-		}
-	}
-
-	// Step 1: Cartographer
-	slog.Info("cartographer: parsing source")
-	start := time.Now()
-	{
-		cartCtx, cartSpan := observability.StartAgentSpan(ctx, "cartographer")
-		observability.Audit().LogAgentStart(cartCtx, "cartographer", workflowID, map[string]string{
-			"source": sourceLang,
-			"input":  inputPath,
-		})
-		cart := cartographer.New()
-		cartResult, err := cart.Run(cartCtx, &agents.AgentContext{
-			Registry:    registry,
-			Params:      map[string]string{"source": sourceLang, "input": inputPath},
-			DefaultOpts: defaultOpts,
-		})
-		elapsed := time.Since(start)
-		if err != nil {
-			observability.RecordError(cartSpan, err)
-			observability.Audit().LogAgentError(cartCtx, "cartographer", workflowID, err)
-			cartSpan.End()
-			return fmt.Errorf("cartographer: %w", err)
-		}
-		m.AddAgent("cartographer", elapsed, "parse", 0)
-		m.CollectSource(sourceLang, countFiles(inputPath), cartResult.Graph)
-		observability.SetAgentMetrics(cartSpan, countFiles(inputPath), m.Source.ModuleCount, 0, 1.0)
-		observability.Audit().LogAgentComplete(cartCtx, "cartographer", workflowID, elapsed, 1.0, 0)
-		cartSpan.End()
-		slog.Info("cartographer complete", "modules", m.Source.ModuleCount, "functions", m.Source.FunctionCount)
-
-		// Step 2: Specular
-		slog.Info("specular: extracting business rules")
-		start = time.Now()
-		specCtx, specSpan := observability.StartAgentSpan(ctx, "specular")
-		observability.Audit().LogAgentStart(specCtx, "specular", workflowID, nil)
-		spec := specular.New()
-		specResult, err := spec.Run(specCtx, &agents.AgentContext{
-			Graph:       cartResult.Graph,
-			LLM:         specularProvider,
-			Registry:    registry,
-			DefaultOpts: defaultOpts,
-		})
-		elapsed = time.Since(start)
-		if err != nil {
-			observability.RecordError(specSpan, err)
-			observability.Audit().LogAgentError(specCtx, "specular", workflowID, err)
-			specSpan.End()
-			return fmt.Errorf("specular: %w", err)
-		}
-		specMode := "llm"
-		if specResult.Metadata != nil && specResult.Metadata["mode"] == "passthrough" {
-			specMode = "passthrough"
-		}
-		m.AddAgent("specular", elapsed, specMode, len(specResult.Errors))
-		m.Source.RuleCount = len(cartResult.Graph.BusinessRules)
-		observability.SetAgentMetrics(specSpan, m.Source.ModuleCount, m.Source.RuleCount, 0, 1.0)
-		observability.Audit().LogAgentComplete(specCtx, "specular", workflowID, elapsed, 1.0, len(specResult.Errors))
-		specSpan.End()
-		slog.Info("specular complete", "rules", m.Source.RuleCount, "mode", specMode)
-
-		// Step 3 + 4: Architect → Judge with retry
-		const maxRetries = 2
-		var finalFiles []plugins.GeneratedFile
-		var finalScore float64
-		var allErrors []string
-
-		for attempt := 0; attempt <= maxRetries; attempt++ {
-			slog.Info("architect: generating target", "language", targetLang, "attempt", attempt+1, "max_attempts", maxRetries+1)
-			start = time.Now()
-
-			archCtx, archSpan := observability.StartAgentSpan(ctx, "architect")
-
-			// Pass Judge feedback to Architect on retries
-			archParams := map[string]string{"target": targetLang}
-			if attempt > 0 && len(allErrors) > 0 {
-				archParams["judge_feedback"] = strings.Join(allErrors, "\n")
-			}
-
-			observability.Audit().LogAgentStart(archCtx, "architect", workflowID, archParams)
-			arch := architect.New()
-			archResult, err := arch.Run(archCtx, &agents.AgentContext{
-				Graph:       cartResult.Graph,
-				LLM:         architectProvider,
-				Registry:    registry,
-				Params:      archParams,
-				DefaultOpts: defaultOpts,
-			})
-			elapsed = time.Since(start)
-			if err != nil {
-				observability.RecordError(archSpan, err)
-				observability.Audit().LogAgentError(archCtx, "architect", workflowID, err)
-				archSpan.End()
-				return fmt.Errorf("architect: %w", err)
-			}
-			archMode := "template"
-			if provider != nil {
-				archMode = "llm"
-			}
-			m.AddAgent("architect", elapsed, archMode, 0)
-			observability.SetAgentMetrics(archSpan, m.Source.ModuleCount, len(archResult.GeneratedFiles), 0, 1.0)
-			observability.Audit().LogAgentComplete(archCtx, "architect", workflowID, elapsed, 1.0, 0)
-			archSpan.End()
-			slog.Info("architect complete", "files_generated", len(archResult.GeneratedFiles))
-
-			slog.Info("judge: verifying output")
-			start = time.Now()
-			judgeCtx, judgeSpan := observability.StartAgentSpan(ctx, "judge")
-			observability.Audit().LogAgentStart(judgeCtx, "judge", workflowID, map[string]string{
-				"source": sourceLang,
-				"target": targetLang,
-			})
-			j := judge.New()
-			genFilesJSON, _ := json.Marshal(archResult.GeneratedFiles)
-			judgeResult, err := j.Run(judgeCtx, &agents.AgentContext{
-				Graph: cartResult.Graph,
-				LLM:   judgeProvider,
-				Params: map[string]string{
-					"source":          sourceLang,
-					"target":          targetLang,
-					"generated_files": string(genFilesJSON),
-				},
-				DefaultOpts: defaultOpts,
-			})
-			elapsed = time.Since(start)
-			if err != nil {
-				observability.RecordError(judgeSpan, err)
-				observability.Audit().LogAgentError(judgeCtx, "judge", workflowID, err)
-				judgeSpan.End()
-				return fmt.Errorf("judge: %w", err)
-			}
-			judgeMode := "llm"
-			if judgeResult.Metadata != nil && judgeResult.Metadata["mode"] == "passthrough" {
-				judgeMode = "passthrough"
-			}
-			m.AddAgent("judge", elapsed, judgeMode, len(judgeResult.Errors))
-			observability.SetAgentMetrics(judgeSpan, len(archResult.GeneratedFiles), len(archResult.GeneratedFiles), 0, judgeResult.Score)
-			observability.Audit().LogAgentComplete(judgeCtx, "judge", workflowID, elapsed, judgeResult.Score, len(judgeResult.Errors))
-			judgeSpan.End()
-			slog.Info("judge complete", "score", judgeResult.Score, "mode", judgeMode)
-
-			// Keep best: only update if this attempt improved the score
-			if judgeResult.Score > finalScore || finalFiles == nil {
-				finalFiles = archResult.GeneratedFiles
-				finalScore = judgeResult.Score
-			}
-			allErrors = judgeResult.Errors
-
-			if finalScore >= 0.8 {
-				break
-			}
-		}
-
-		// Step 5: TestGen (optional)
-		if ac := os.Getenv("ANVIL_GENERATE_TESTS"); ac == "true" || ac == "1" {
-			slog.Info("testgen: generating tests")
-			start = time.Now()
-			tgCtx, tgSpan := observability.StartAgentSpan(ctx, "testgen")
-			observability.Audit().LogAgentStart(tgCtx, "testgen", workflowID, map[string]string{"target": targetLang})
-			tg := testgen.New()
-			tgResult, err := tg.Run(tgCtx, &agents.AgentContext{
-				Graph:    cartResult.Graph,
-				LLM:      provider,
-				Registry: registry,
-				Params: map[string]string{
-					"target":          targetLang,
-					"generated_files": "present",
-				},
-				DefaultOpts: defaultOpts,
-			})
-			elapsed = time.Since(start)
-			if err != nil {
-				observability.RecordError(tgSpan, err)
-				observability.Audit().LogAgentError(tgCtx, "testgen", workflowID, err)
-				tgSpan.End()
-				slog.Warn("testgen failed", "error", err)
-			} else {
-				m.AddAgent("testgen", elapsed, "stub", len(tgResult.Errors))
-				observability.SetAgentMetrics(tgSpan, len(finalFiles), len(tgResult.GeneratedFiles), 0, 1.0)
-				observability.Audit().LogAgentComplete(tgCtx, "testgen", workflowID, elapsed, 1.0, len(tgResult.Errors))
-				tgSpan.End()
-				slog.Info("testgen complete", "test_files", len(tgResult.GeneratedFiles))
-
-				// Write test files alongside main output
-				for _, f := range tgResult.GeneratedFiles {
-					outPath, err := fileutil.SafeJoin(outputPath, f.Path)
-					if err != nil {
-						slog.Warn("skipping file with unsafe path", "path", f.Path, "error", err)
-						continue
-					}
-					if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-						slog.Warn("failed to create test dir", "error", err)
-						continue
-					}
-					if err := os.WriteFile(outPath, f.Content, 0o644); err != nil {
-						slog.Warn("failed to write test file", "path", outPath, "error", err)
-					}
-				}
-			}
-		}
-
-		// Write output
-		for _, f := range finalFiles {
-			outPath, err := fileutil.SafeJoin(outputPath, f.Path)
-			if err != nil {
-				return fmt.Errorf("unsafe file path %q: %w", f.Path, err)
-			}
-			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
-				return err
-			}
-			if err := os.WriteFile(outPath, f.Content, 0o644); err != nil {
-				return err
-			}
-		}
-
-		// Finalize metrics
-		m.CollectTarget(targetLang, finalFiles)
-		m.Finish(finalScore, allErrors)
-
-		observability.Audit().LogWorkflowEnd(ctx, workflowID, true, time.Since(pipelineStart), finalScore, outputPath)
-
-		if jsonReport {
-			data, _ := m.JSON()
-			fmt.Println(string(data))
-		} else {
-			m.PrintSummary(os.Stdout)
-		}
-	}
-
-	return nil
-}
-
-func countFiles(path string) int {
-	info, err := os.Stat(path)
-	if err != nil {
-		return 0
-	}
-	if !info.IsDir() {
-		return 1
-	}
-	count := 0
-	filepath.Walk(path, func(_ string, fi os.FileInfo, _ error) error {
-		if !fi.IsDir() {
-			count++
-		}
-		return nil
+	ctx := context.Background()
+	_, err = pipeline.Run(ctx, pipeline.PipelineConfig{
+		SourceLang: sourceLang,
+		TargetLang: targetLang,
+		InputPath:  inputPath,
+		OutputPath: outputPath,
+		Config:     cfg,
+		Registry:   registry,
+		Providers:  providers,
+		JsonReport: jsonReport,
 	})
-	return count
+	return err
 }
 
 // runHarness executes fixtures against generated code and produces a proof pack.
