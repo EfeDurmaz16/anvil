@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/efebarandurmaz/anvil/internal/harness"
+	server_pkg "github.com/efebarandurmaz/anvil/internal/server"
 )
 
 // Helper to create test proof pack on disk
@@ -90,7 +91,7 @@ func setupTestServer(t *testing.T, dirs ...string) (*Explorer, *httptest.Server)
 	mux.HandleFunc("/api/health", explorer.handleHealth)
 	mux.HandleFunc("/api/rescan", explorer.handleRescan)
 
-	handler := corsMiddleware(mux)
+	handler := server_pkg.FromEnv(mux)
 	server := httptest.NewServer(handler)
 
 	return explorer, server
@@ -676,14 +677,20 @@ func TestCORSHeaders(t *testing.T) {
 	_, server := setupTestServer(t, dir)
 	defer server.Close()
 
-	resp, err := http.Get(server.URL + "/api/health")
+	req, err := http.NewRequest("GET", server.URL+"/api/health", nil)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	req.Header.Set("Origin", "http://localhost:3000")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
 
-	if origin := resp.Header.Get("Access-Control-Allow-Origin"); origin != "*" {
-		t.Errorf("expected CORS origin *, got %s", origin)
+	if origin := resp.Header.Get("Access-Control-Allow-Origin"); origin != "http://localhost:3000" {
+		t.Errorf("expected CORS origin http://localhost:3000, got %s", origin)
 	}
 
 	if methods := resp.Header.Get("Access-Control-Allow-Methods"); methods == "" {

@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/efebarandurmaz/anvil/internal/server"
 )
 
 //go:embed static
@@ -54,8 +56,8 @@ func NewServer(config *Config, store *Store, hub *Hub) *Server {
 	// Static file server
 	mux.HandleFunc("/", s.handleStatic)
 
-	// Wrap with CORS and logging middleware
-	handler := corsMiddleware(loggingMiddleware(mux))
+	// Wrap with CORS, API key auth, and logging middleware
+	handler := server.FromEnv(loggingMiddleware(mux))
 
 	s.server = &http.Server{
 		Addr:         config.ListenAddr,
@@ -234,22 +236,6 @@ func respondJSON(w http.ResponseWriter, data interface{}) {
 		slog.Error("Failed to encode JSON response", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
-}
-
-// corsMiddleware adds CORS headers for local development
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
 }
 
 // loggingMiddleware logs HTTP requests

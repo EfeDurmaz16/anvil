@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/efebarandurmaz/anvil/internal/server"
 )
 
 //go:embed static
@@ -60,7 +62,7 @@ func New(config *Config) (*Explorer, error) {
 	// Static file server
 	mux.HandleFunc("/", e.handleStatic)
 
-	handler := corsMiddleware(loggingMiddleware(mux))
+	handler := server.FromEnv(loggingMiddleware(mux))
 
 	e.server = &http.Server{
 		Addr:         config.ListenAddr,
@@ -194,19 +196,6 @@ func respondJSON(w http.ResponseWriter, data interface{}) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		slog.Error("Failed to encode JSON", "error", err)
 	}
-}
-
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func loggingMiddleware(next http.Handler) http.Handler {
