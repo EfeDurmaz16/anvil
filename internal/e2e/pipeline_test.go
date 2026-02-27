@@ -16,7 +16,10 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 	cobolplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/cobol"
+	fortranplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/fortran"
+	perlplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/perl"
 	golangplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/golang"
+	javaplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/java"
 	pythonplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/python"
 	tsplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/typescript"
 )
@@ -530,4 +533,308 @@ func TestE2E_Pipeline_EmptyGraph(t *testing.T) {
 		t.Errorf("expected score in [0,1], got %f", judgeResult.Score)
 	}
 	t.Logf("Judge score for empty graph: %f", judgeResult.Score)
+}
+
+// runFullPipeline is a helper that runs Cartographer → Specular → Architect → Judge
+// in template mode (nil LLM) and returns the architect result and judge score.
+func runFullPipeline(t *testing.T, reg *plugins.Registry, source, target, inputDir string) (*agents.AgentResult, float64) {
+	t.Helper()
+	ctx := context.Background()
+
+	// Cartographer
+	carto := cartographer.New()
+	cartoResult, err := carto.Run(ctx, &agents.AgentContext{
+		Registry: reg,
+		Params:   map[string]string{"source": source, "input": inputDir},
+	})
+	if err != nil {
+		t.Fatalf("cartographer failed: %v", err)
+	}
+	if cartoResult.Graph == nil {
+		t.Fatal("cartographer returned nil graph")
+	}
+
+	// Specular (passthrough)
+	spec := specular.New()
+	specResult, err := spec.Run(ctx, &agents.AgentContext{
+		Graph:    cartoResult.Graph,
+		LLM:     nil,
+		Registry: reg,
+	})
+	if err != nil {
+		t.Fatalf("specular failed: %v", err)
+	}
+
+	// Architect (template mode)
+	arch := architect.New()
+	archResult, err := arch.Run(ctx, &agents.AgentContext{
+		Graph:    specResult.Graph,
+		LLM:     nil,
+		Registry: reg,
+		Params:   map[string]string{"target": target},
+	})
+	if err != nil {
+		t.Fatalf("architect failed: %v", err)
+	}
+	if len(archResult.GeneratedFiles) == 0 {
+		t.Fatal("architect generated no files")
+	}
+
+	// Judge (passthrough)
+	filesJSON, _ := json.Marshal(archResult.GeneratedFiles)
+	judgeAgent := judge.New()
+	judgeResult, err := judgeAgent.Run(ctx, &agents.AgentContext{
+		Graph: archResult.Graph,
+		LLM:   nil,
+		Params: map[string]string{
+			"source":          source,
+			"target":          target,
+			"generated_files": string(filesJSON),
+		},
+	})
+	if err != nil {
+		t.Fatalf("judge failed: %v", err)
+	}
+	if judgeResult.Score < 0 || judgeResult.Score > 1 {
+		t.Errorf("expected score in [0,1], got %f", judgeResult.Score)
+	}
+
+	return archResult, judgeResult.Score
+}
+
+func TestE2E_PerlToPython_TemplateMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	perlSource := `package Calculator;
+use strict;
+use warnings;
+
+sub new {
+    my ($class, %args) = @_;
+    return bless { result => 0 }, $class;
+}
+
+sub add {
+    my ($self, $a, $b) = @_;
+    $self->{result} = $a + $b;
+    return $self->{result};
+}
+
+sub subtract {
+    my ($self, $a, $b) = @_;
+    $self->{result} = $a - $b;
+    return $self->{result};
+}
+
+1;
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "Calculator.pm"), []byte(perlSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := plugins.NewRegistry()
+	reg.RegisterSource(perlplugin.New())
+	reg.RegisterTarget(pythonplugin.New())
+
+	archResult, score := runFullPipeline(t, reg, "perl", "python", tmpDir)
+
+	var hasManifest, hasPyproject bool
+	for _, f := range archResult.GeneratedFiles {
+		switch f.Path {
+		case "anvil.manifest.json":
+			hasManifest = true
+			if !strings.Contains(string(f.Content), `"language": "python"`) {
+				t.Error("manifest missing python language")
+			}
+		case "pyproject.toml":
+			hasPyproject = true
+		}
+	}
+	if !hasManifest {
+		t.Error("missing anvil.manifest.json")
+	}
+	if !hasPyproject {
+		t.Error("missing pyproject.toml")
+	}
+	t.Logf("Perl→Python judge score: %f (%d files generated)", score, len(archResult.GeneratedFiles))
+}
+
+func TestE2E_FortranToGo_TemplateMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	fortranSource := `program adder
+    implicit none
+    integer :: a, b, total
+
+    a = 10
+    b = 20
+    call compute_sum(a, b, total)
+    print *, "Sum:", total
+
+contains
+
+    subroutine compute_sum(x, y, result)
+        integer, intent(in) :: x, y
+        integer, intent(out) :: result
+        result = x + y
+    end subroutine compute_sum
+
+end program adder
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "adder.f90"), []byte(fortranSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := plugins.NewRegistry()
+	reg.RegisterSource(fortranplugin.New())
+	reg.RegisterTarget(golangplugin.New())
+
+	archResult, score := runFullPipeline(t, reg, "fortran", "go", tmpDir)
+
+	var hasManifest, hasGoMod bool
+	for _, f := range archResult.GeneratedFiles {
+		switch f.Path {
+		case "anvil.manifest.json":
+			hasManifest = true
+			if !strings.Contains(string(f.Content), `"language": "go"`) {
+				t.Error("manifest missing go language")
+			}
+		case "go.mod":
+			hasGoMod = true
+		}
+	}
+	if !hasManifest {
+		t.Error("missing anvil.manifest.json")
+	}
+	if !hasGoMod {
+		t.Error("missing go.mod")
+	}
+	t.Logf("Fortran→Go judge score: %f (%d files generated)", score, len(archResult.GeneratedFiles))
+}
+
+func TestE2E_COBOLToJava_TemplateMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	cobolSource := `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. INVENTORY.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 ITEM-COUNT PIC 9(4).
+       01 ITEM-PRICE PIC 9(5)V99.
+       01 TOTAL-VALUE PIC 9(7)V99.
+       PROCEDURE DIVISION.
+       MAIN-PARAGRAPH.
+           COMPUTE TOTAL-VALUE = ITEM-COUNT * ITEM-PRICE.
+           DISPLAY "TOTAL: " TOTAL-VALUE.
+           STOP RUN.
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "inventory.cbl"), []byte(cobolSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	reg := plugins.NewRegistry()
+	reg.RegisterSource(cobolplugin.New())
+	reg.RegisterTarget(javaplugin.New())
+
+	archResult, score := runFullPipeline(t, reg, "cobol", "java", tmpDir)
+
+	var hasManifest, hasPom, hasApplication, hasRunner, hasMvnw, hasMvnwCmd bool
+	for _, f := range archResult.GeneratedFiles {
+		switch f.Path {
+		case "anvil.manifest.json":
+			hasManifest = true
+			content := string(f.Content)
+			if !strings.Contains(content, `"language": "java"`) {
+				t.Error("manifest missing java language")
+			}
+			if !strings.Contains(content, "./mvnw") {
+				t.Error("manifest missing mvnw compile command")
+			}
+			if !strings.Contains(content, `"test"`) {
+				t.Error("manifest missing test command")
+			}
+		case "pom.xml":
+			hasPom = true
+			if !strings.Contains(string(f.Content), "spring-boot-starter") {
+				t.Error("pom.xml missing Spring Boot dependency")
+			}
+		case "mvnw":
+			hasMvnw = true
+			if !strings.Contains(string(f.Content), "#!/bin/sh") {
+				t.Error("mvnw missing shebang")
+			}
+		case "mvnw.cmd":
+			hasMvnwCmd = true
+		case "src/main/java/com/anvil/generated/Application.java":
+			hasApplication = true
+		case "src/main/java/com/anvil/generated/AnvilRunner.java":
+			hasRunner = true
+		}
+	}
+
+	if !hasManifest {
+		t.Error("missing anvil.manifest.json")
+	}
+	if !hasPom {
+		t.Error("missing pom.xml")
+	}
+	if !hasMvnw {
+		t.Error("missing mvnw (Maven wrapper)")
+	}
+	if !hasMvnwCmd {
+		t.Error("missing mvnw.cmd (Maven wrapper for Windows)")
+	}
+	if !hasApplication {
+		t.Error("missing Application.java")
+	}
+	if !hasRunner {
+		t.Error("missing AnvilRunner.java")
+	}
+	t.Logf("COBOL→Java judge score: %f (%d files generated)", score, len(archResult.GeneratedFiles))
+}
+
+func TestE2E_MultiFileCOBOL_TemplateMode(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mainCbl := `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. MAIN-PROGRAM.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-NAME PIC X(20).
+       01 WS-GREETING PIC X(50).
+       PROCEDURE DIVISION.
+           MOVE "World" TO WS-NAME.
+           STRING "Hello, " WS-NAME INTO WS-GREETING.
+           DISPLAY WS-GREETING.
+           STOP RUN.
+`
+	helperCbl := `       IDENTIFICATION DIVISION.
+       PROGRAM-ID. HELPER.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       01 WS-RESULT PIC 9(5).
+       PROCEDURE DIVISION.
+       COMPUTE-AREA.
+           COMPUTE WS-RESULT = 10 * 20.
+           DISPLAY "AREA: " WS-RESULT.
+           STOP RUN.
+`
+	os.WriteFile(filepath.Join(tmpDir, "main.cbl"), []byte(mainCbl), 0o644)
+	os.WriteFile(filepath.Join(tmpDir, "helper.cbl"), []byte(helperCbl), 0o644)
+
+	reg := plugins.NewRegistry()
+	reg.RegisterSource(cobolplugin.New())
+	reg.RegisterTarget(tsplugin.New())
+
+	archResult, score := runFullPipeline(t, reg, "cobol", "typescript", tmpDir)
+
+	// Should have generated service files for both modules
+	serviceCount := 0
+	for _, f := range archResult.GeneratedFiles {
+		if strings.HasPrefix(f.Path, "src/generated/") && strings.HasSuffix(f.Path, ".ts") &&
+			f.Path != "src/generated/index.ts" && f.Path != "src/generated/model.ts" {
+			serviceCount++
+		}
+	}
+	if serviceCount < 2 {
+		t.Errorf("expected at least 2 service files for 2 COBOL programs, got %d", serviceCount)
+	}
+	t.Logf("Multi-file COBOL→TS judge score: %f (%d files, %d services)", score, len(archResult.GeneratedFiles), serviceCount)
 }
