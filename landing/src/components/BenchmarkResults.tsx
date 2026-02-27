@@ -7,10 +7,10 @@ const rows = [
   { name: "AWS CardDemo", lang: "COBOL", files: "61", modules: "29", fns: "546", types: "2,032", generated: "60", time: "318ms" },
   { name: "CobolCraft", lang: "COBOL", files: "311", modules: "206", fns: "423", types: "1,363", generated: "270", time: "462ms" },
   { name: "COBOL Library", lang: "COBOL", files: "126", modules: "28", fns: "54", types: "226", generated: "30", time: "17ms" },
-  { name: "Bugzilla", lang: "Perl", files: "248", modules: "86", fns: "1,204", types: "512", generated: "142", time: "287ms" },
-  { name: "Movable Type", lang: "Perl", files: "189", modules: "64", fns: "891", types: "328", generated: "98", time: "195ms" },
-  { name: "LAPACK Subset", lang: "Fortran", files: "94", modules: "12", fns: "156", types: "89", generated: "48", time: "84ms" },
-  { name: "WRF Core", lang: "Fortran", files: "167", modules: "34", fns: "289", types: "201", generated: "72", time: "142ms" },
+  { name: "Bugzilla (Beta)", lang: "Perl", files: "248", modules: "86", fns: "1,204", types: "512", generated: "142", time: "287ms" },
+  { name: "Movable Type (Beta)", lang: "Perl", files: "189", modules: "64", fns: "891", types: "328", generated: "98", time: "195ms" },
+  { name: "LAPACK Subset (Beta)", lang: "Fortran", files: "94", modules: "12", fns: "156", types: "89", generated: "48", time: "84ms" },
+  { name: "WRF Core (Beta)", lang: "Fortran", files: "167", modules: "34", fns: "289", types: "201", generated: "72", time: "142ms" },
 ];
 
 const cols = [
@@ -21,7 +21,7 @@ const cols = [
   { key: "fns", label: "Functions", w: "w-[80px]" },
   { key: "types", label: "Data Types", w: "w-[90px]" },
   { key: "generated", label: "Generated", w: "w-[80px]" },
-  { key: "time", label: "Time", w: "w-[70px]" },
+  { key: "time", label: "Parse Time (no LLM)", w: "w-[160px]" },
 ] as const;
 
 export default function BenchmarkResults() {
@@ -74,6 +74,9 @@ export default function BenchmarkResults() {
 
       <p className="font-mono text-xs md:text-sm font-semibold text-center" style={{ color: "var(--color-text)" }}>
         1,196 files across 3 languages &rarr; 720 generated artifacts in under 2 seconds. Zero cloud required.
+      </p>
+      <p className="font-mono text-[10px] md:text-xs text-center max-w-2xl" style={{ color: "var(--color-text-secondary)" }}>
+        * Times shown are Cartographer (parsing) phase only. Full LLM-assisted migration depends on model and hardware. Projects marked (Beta) are unverified against production output.
       </p>
     </section>
   );

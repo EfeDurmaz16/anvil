@@ -46,7 +46,7 @@ export default function Hero() {
       >
         <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-accent)]" />
         <span className="font-mono text-[11px] font-medium text-[var(--color-accent)]">
-          Open Source · MIT Licensed · v0.1
+          Open Source · MIT Licensed · v0.1 — Early Access
         </span>
       </motion.div>
 

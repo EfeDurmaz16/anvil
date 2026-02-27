@@ -480,13 +480,14 @@ export default function PricingPage() {
 
                 {status === "error" && (
                   <p className="font-mono text-[12px] text-center text-red-400">
-                    Something went wrong. Please try again or email us directly
-                    at{" "}
+                    Something went wrong. Please try again or open an issue on{" "}
                     <a
-                      href="mailto:efebarandurmaz05@gmail.com"
+                      href="https://github.com/EfeDurmaz16/anvil/issues"
                       className="underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
                     >
-                      efebarandurmaz05@gmail.com
+                      GitHub
                     </a>
                   </p>
                 )}
