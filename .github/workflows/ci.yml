@@ -7,22 +7,15 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ['1.24']
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
-
-      - name: Verify dependencies
-        run: go mod verify
+          go-version: '1.23'
+          cache: true
 
       - name: Vet
         run: go vet ./...
@@ -31,13 +24,45 @@ jobs:
         run: go build ./...
 
       - name: Test
-        run: go test ./... -short -count=1 -race
+        run: go test ./... -count=1 -race -coverprofile=coverage.out
 
-      - name: Integration smoke test
-        run: |
-          go run ./cmd/anvil run \
-            --source cobol \
-            --target typescript \
-            --input testdata/cobol/calculator.cbl \
-            --output /tmp/ci-ts \
-            --config configs/anvil.yaml || true
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Build binary
+        run: go build -o anvil ./cmd/anvil
+
+      - name: Smoke test - help
+        run: ./anvil --help
+
+      - name: Smoke test - providers
+        run: ./anvil providers

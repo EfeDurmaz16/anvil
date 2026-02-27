@@ -73,6 +73,8 @@ services:
       - ANVIL_TEMPORAL_TASK_QUEUE=${ANVIL_TEMPORAL_TASK_QUEUE:-anvil-tasks}
       - ANVIL_LOG_LEVEL=${ANVIL_LOG_LEVEL:-info}
       - ANVIL_LOG_FORMAT=${ANVIL_LOG_FORMAT:-json}
+      - NEO4J_URI=${NEO4J_URI:-bolt://neo4j:7687}
+      - QDRANT_HOST=${QDRANT_HOST:-qdrant}
     volumes:
       - ./testdata:/app/testdata:ro
       - ./output:/app/output
@@ -103,6 +105,36 @@ services:
     profiles:
       - full
 
+  # Neo4j graph database (optional)
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/anvilpass
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "anvilpass", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant vector database (optional)
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Optional: Local LLM server placeholder (Ollama)
   # Uncomment to use local LLM
   # ollama:
@@ -121,6 +153,8 @@ services:
 
 volumes:
   postgres_data:
+  neo4j_data:
+  qdrant_data:
   # ollama_data:
 
 networks:
