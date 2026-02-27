@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/efebarandurmaz/anvil/internal/llm"
 )
@@ -30,7 +31,7 @@ func New(apiKey, model, baseURL string) *Client {
 		apiKey:  apiKey,
 		model:   model,
 		baseURL: baseURL,
-		http:    &http.Client{},
+		http:    &http.Client{Timeout: 300 * time.Second},
 	}
 }
 
