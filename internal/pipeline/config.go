@@ -16,4 +16,17 @@ type PipelineConfig struct {
 	Registry   *plugins.Registry
 	Providers  map[string]llm.Provider
 	JsonReport bool
+
+	// GraphURI is the Neo4j connection URI for optional semantic graph storage.
+	// Format: "neo4j://user:password@host:7687" or split into GraphUsername/GraphPassword.
+	// Leave empty to skip Neo4j storage.
+	GraphURI      string
+	GraphUsername string
+	GraphPassword string
+
+	// VectorHost is the Qdrant host for optional function embedding storage.
+	// Leave empty to skip Qdrant integration.
+	VectorHost       string
+	VectorPort       int
+	VectorCollection string
 }

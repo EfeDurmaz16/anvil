@@ -19,6 +19,7 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/agents/specular"
 	"github.com/efebarandurmaz/anvil/internal/agents/testgen"
 	"github.com/efebarandurmaz/anvil/internal/fileutil"
+	neo4jrepo "github.com/efebarandurmaz/anvil/internal/graph/neo4j"
 	"github.com/efebarandurmaz/anvil/internal/llm"
 	"github.com/efebarandurmaz/anvil/internal/metrics"
 	"github.com/efebarandurmaz/anvil/internal/observability"
@@ -41,6 +42,11 @@ func Run(ctx context.Context, cfg PipelineConfig) (*PipelineResult, error) {
 	case "golang":
 		targetLang = "go"
 	}
+
+	// Observability note: tracing spans and audit events are active throughout the pipeline.
+	// Set ANVIL_OTLP_ENDPOINT to export traces to an OpenTelemetry collector.
+	// Set ANVIL_AUDIT_LOG to a file path to enable audit logging.
+	// Prometheus metrics are available via observability.Metrics().
 
 	// Initialize tracing. No endpoint means no-op tracer; set ANVIL_OTLP_ENDPOINT to enable.
 	tracingCfg := observability.DefaultTracingConfig()
@@ -78,6 +84,7 @@ func Run(ctx context.Context, cfg PipelineConfig) (*PipelineResult, error) {
 	pipelineStart := time.Now()
 
 	m := metrics.New()
+	anvilMetrics := observability.Metrics()
 
 	// Build default LLM request options from config.
 	defaultOpts := &llm.RequestOptions{}
@@ -135,8 +142,42 @@ func Run(ctx context.Context, cfg PipelineConfig) (*PipelineResult, error) {
 	m.CollectSource(cfg.SourceLang, countFiles(cfg.InputPath), cartResult.Graph)
 	observability.SetAgentMetrics(cartSpan, countFiles(cfg.InputPath), m.Source.ModuleCount, 0, 1.0)
 	observability.Audit().LogAgentComplete(cartCtx, "cartographer", workflowID, elapsed, 1.0, 0)
+	anvilMetrics.RecordAgentRun(elapsed, 1.0, nil)
 	cartSpan.End()
 	slog.Info("cartographer complete", "modules", m.Source.ModuleCount, "functions", m.Source.FunctionCount)
+
+	// Optional: store semantic graph in Neo4j if GraphURI is configured.
+	if cfg.GraphURI != "" {
+		neo4jURI := cfg.GraphURI
+		neo4jUser := cfg.GraphUsername
+		neo4jPass := cfg.GraphPassword
+		// Fall back to config file values if not set on PipelineConfig directly.
+		if neo4jURI == "" && cfg.Config != nil {
+			neo4jURI = cfg.Config.Graph.URI
+			neo4jUser = cfg.Config.Graph.Username
+			neo4jPass = cfg.Config.Graph.Password
+		}
+		repo, neo4jErr := neo4jrepo.NewNeo4j(ctx, neo4jURI, neo4jUser, neo4jPass)
+		if neo4jErr != nil {
+			slog.Warn("neo4j connection failed, skipping graph storage", "error", neo4jErr)
+		} else {
+			defer repo.Close(ctx)
+			if storeErr := repo.StoreGraph(ctx, cartResult.Graph); storeErr != nil {
+				slog.Warn("failed to store graph in neo4j", "error", storeErr)
+			} else {
+				slog.Info("graph stored in neo4j", "uri", neo4jURI)
+			}
+		}
+	}
+
+	// Optional: Qdrant vector storage integration point.
+	// TODO: wire function embeddings into Qdrant once an embedding model is available.
+	// When cfg.VectorHost != "", use qdrant.NewQdrant(ctx, cfg.VectorHost, cfg.VectorPort, cfg.VectorCollection)
+	// then call repo.Upsert(ctx, docs) with per-function embeddings produced by an embedder.
+	if cfg.VectorHost != "" {
+		slog.Info("qdrant integration point: vector storage configured but embedding not yet wired",
+			"host", cfg.VectorHost, "collection", cfg.VectorCollection)
+	}
 
 	// Step 2: Specular
 	slog.Info("specular: extracting business rules")
@@ -165,6 +206,7 @@ func Run(ctx context.Context, cfg PipelineConfig) (*PipelineResult, error) {
 	m.Source.RuleCount = len(cartResult.Graph.BusinessRules)
 	observability.SetAgentMetrics(specSpan, m.Source.ModuleCount, m.Source.RuleCount, 0, 1.0)
 	observability.Audit().LogAgentComplete(specCtx, "specular", workflowID, elapsed, 1.0, len(specResult.Errors))
+	anvilMetrics.RecordAgentRun(elapsed, 1.0, nil)
 	specSpan.End()
 	slog.Info("specular complete", "rules", m.Source.RuleCount, "mode", specMode)
 
@@ -210,6 +252,7 @@ func Run(ctx context.Context, cfg PipelineConfig) (*PipelineResult, error) {
 		m.AddAgent("architect", elapsed, archMode, 0)
 		observability.SetAgentMetrics(archSpan, m.Source.ModuleCount, len(archResult.GeneratedFiles), 0, 1.0)
 		observability.Audit().LogAgentComplete(archCtx, "architect", workflowID, elapsed, 1.0, 0)
+		anvilMetrics.RecordAgentRun(elapsed, 1.0, nil)
 		archSpan.End()
 		slog.Info("architect complete", "files_generated", len(archResult.GeneratedFiles))
 
@@ -246,6 +289,7 @@ func Run(ctx context.Context, cfg PipelineConfig) (*PipelineResult, error) {
 		m.AddAgent("judge", elapsed, judgeMode, len(judgeResult.Errors))
 		observability.SetAgentMetrics(judgeSpan, len(archResult.GeneratedFiles), len(archResult.GeneratedFiles), 0, judgeResult.Score)
 		observability.Audit().LogAgentComplete(judgeCtx, "judge", workflowID, elapsed, judgeResult.Score, len(judgeResult.Errors))
+		anvilMetrics.RecordAgentRun(elapsed, judgeResult.Score, nil)
 		judgeSpan.End()
 		slog.Info("judge complete", "score", judgeResult.Score, "mode", judgeMode)
 
@@ -288,6 +332,7 @@ func Run(ctx context.Context, cfg PipelineConfig) (*PipelineResult, error) {
 			m.AddAgent("testgen", elapsed, "stub", len(tgResult.Errors))
 			observability.SetAgentMetrics(tgSpan, len(finalFiles), len(tgResult.GeneratedFiles), 0, 1.0)
 			observability.Audit().LogAgentComplete(tgCtx, "testgen", workflowID, elapsed, 1.0, len(tgResult.Errors))
+			anvilMetrics.RecordAgentRun(elapsed, 1.0, nil)
 			tgSpan.End()
 			slog.Info("testgen complete", "test_files", len(tgResult.GeneratedFiles))
 
