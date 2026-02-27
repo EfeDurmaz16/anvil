@@ -20,6 +20,7 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/agents/specular"
 	"github.com/efebarandurmaz/anvil/internal/agents/testgen"
 	"github.com/efebarandurmaz/anvil/internal/config"
+	"github.com/efebarandurmaz/anvil/internal/fileutil"
 	"github.com/efebarandurmaz/anvil/internal/dashboard"
 	"github.com/efebarandurmaz/anvil/internal/depgraph"
 	"github.com/efebarandurmaz/anvil/internal/harness"
@@ -823,7 +824,11 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 
 				// Write test files alongside main output
 				for _, f := range tgResult.GeneratedFiles {
-					outPath := filepath.Join(outputPath, f.Path)
+					outPath, err := fileutil.SafeJoin(outputPath, f.Path)
+					if err != nil {
+						slog.Warn("skipping file with unsafe path", "path", f.Path, "error", err)
+						continue
+					}
 					if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 						slog.Warn("failed to create test dir", "error", err)
 						continue
@@ -837,7 +842,10 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 
 		// Write output
 		for _, f := range finalFiles {
-			outPath := filepath.Join(outputPath, f.Path)
+			outPath, err := fileutil.SafeJoin(outputPath, f.Path)
+			if err != nil {
+				return fmt.Errorf("unsafe file path %q: %w", f.Path, err)
+			}
 			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 				return err
 			}

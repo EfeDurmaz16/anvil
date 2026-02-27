@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/efebarandurmaz/anvil/internal/fileutil"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
 )
 
@@ -142,17 +143,19 @@ func (s *Store) List() []SnapshotSummary {
 // FindByTag returns the snapshot with the given tag.
 func (s *Store) FindByTag(tag string) (*Snapshot, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
-
+	var targetID string
 	for _, summary := range s.index.Snapshots {
 		if summary.Tag == tag {
-			s.mu.RUnlock()
-			snap, err := s.Load(summary.ID)
-			s.mu.RLock()
-			return snap, err
+			targetID = summary.ID
+			break
 		}
 	}
-	return nil, fmt.Errorf("snapshot with tag %q not found", tag)
+	s.mu.RUnlock()
+
+	if targetID == "" {
+		return nil, fmt.Errorf("snapshot with tag %q not found", tag)
+	}
+	return s.Load(targetID)
 }
 
 // Tag assigns a tag to a snapshot.
@@ -224,7 +227,10 @@ func (s *Store) Restore(snap *Snapshot, targetDir string) error {
 	}
 
 	for _, f := range files {
-		outPath := filepath.Join(targetDir, f.Path)
+		outPath, err := fileutil.SafeJoin(targetDir, f.Path)
+		if err != nil {
+			return fmt.Errorf("unsafe path %s: %w", f.Path, err)
+		}
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 			return fmt.Errorf("create dir for %s: %w", f.Path, err)
 		}

@@ -13,6 +13,7 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/agents/cartographer"
 	"github.com/efebarandurmaz/anvil/internal/agents/judge"
 	"github.com/efebarandurmaz/anvil/internal/agents/specular"
+	"github.com/efebarandurmaz/anvil/internal/fileutil"
 	"github.com/efebarandurmaz/anvil/internal/harness"
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
@@ -200,7 +201,11 @@ func HarnessActivity(ctx context.Context, input HarnessInput) (HarnessResult, er
 	}
 
 	for _, f := range files {
-		outPath := filepath.Join(workDir, f.Path)
+		outPath, err := fileutil.SafeJoin(workDir, f.Path)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("unsafe path %s: %v", f.Path, err))
+			continue
+		}
 		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("create dir for %s: %v", f.Path, err))
 			continue
