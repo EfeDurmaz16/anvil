@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -14,12 +16,64 @@ import (
 	"time"
 )
 
+// privateRanges lists the CIDR blocks considered private/loopback.
+var privateRanges []*net.IPNet
+
+func init() {
+	cidrs := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"::1/128",
+		"fc00::/7",
+	}
+	for _, cidr := range cidrs {
+		_, block, err := net.ParseCIDR(cidr)
+		if err == nil {
+			privateRanges = append(privateRanges, block)
+		}
+	}
+}
+
+// isPrivateIP resolves host and returns true if any resolved address falls
+// within a private/loopback range (SSRF guard).
+func isPrivateIP(host string) bool {
+	// Strip port if present.
+	h, _, err := net.SplitHostPort(host)
+	if err != nil {
+		// No port — use as-is.
+		h = host
+	}
+
+	addrs, err := net.LookupHost(h)
+	if err != nil {
+		// Treat resolution failure as private to fail-safe.
+		return true
+	}
+
+	for _, addr := range addrs {
+		ip := net.ParseIP(addr)
+		if ip == nil {
+			continue
+		}
+		for _, block := range privateRanges {
+			if block.Contains(ip) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // RecorderConfig configures the fixture recorder.
 type RecorderConfig struct {
-	TargetURL   string // Upstream service to proxy to
-	ListenAddr  string // Address to listen on (default ":8090")
-	OutputPath  string // JSONL file to write fixtures to
-	MaxBodySize int64  // Max captured body size in bytes (default 1MB)
+	TargetURL    string // Upstream service to proxy to
+	ListenAddr   string // Address to listen on (default ":8090")
+	OutputPath   string // JSONL file to write fixtures to
+	MaxBodySize  int64  // Max captured body size in bytes (default 1MB)
+	AllowPrivate bool   // Allow proxying to private/loopback IPs (for local dev)
 }
 
 // Recorder is an HTTP reverse proxy that captures request/response pairs as JSONL fixtures.
@@ -69,16 +123,43 @@ func NewRecorder(config *RecorderConfig) (*Recorder, error) {
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
+
+	// Set a 30-second timeout on outbound proxy requests.
+	proxy.Transport = &http.Transport{
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ResponseHeaderTimeout: 30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+	}
+
 	origDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		origDirector(req)
 		req.Host = target.Host
 	}
 	proxy.ModifyResponse = rec.recordResponse
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		log.Printf("recorder: proxy error for %s %s: %v", r.Method, r.URL.Path, err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Capture request body
+		// SSRF guard: block requests that resolve to private/loopback addresses.
+		if !config.AllowPrivate && isPrivateIP(target.Hostname()) {
+			log.Printf("recorder: SSRF blocked — target %s resolves to a private IP", target.Hostname())
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		// Apply per-request timeout via context.
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		r = r.WithContext(ctx)
+
+		// Capture request body, applying MaxBodySize limit.
 		var bodyBytes []byte
 		if r.Body != nil {
 			bodyBytes, _ = io.ReadAll(io.LimitReader(r.Body, config.MaxBodySize))
@@ -86,7 +167,7 @@ func NewRecorder(config *RecorderConfig) (*Recorder, error) {
 			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		}
 
-		// Flatten headers to single values
+		// Flatten headers to single values.
 		headers := make(map[string]string)
 		for k, v := range r.Header {
 			if len(v) > 0 {
@@ -94,7 +175,7 @@ func NewRecorder(config *RecorderConfig) (*Recorder, error) {
 			}
 		}
 
-		// Try to parse body as JSON, fall back to string
+		// Try to parse body as JSON, fall back to string.
 		var jsonBody json.RawMessage
 		if len(bodyBytes) > 0 {
 			if json.Valid(bodyBytes) {
@@ -105,7 +186,7 @@ func NewRecorder(config *RecorderConfig) (*Recorder, error) {
 			}
 		}
 
-		ctx := context.WithValue(r.Context(), reqDataKey, &capturedRequest{
+		ctx = context.WithValue(r.Context(), reqDataKey, &capturedRequest{
 			Method: r.Method,
 			Path:   r.URL.Path,
 			Header: headers,
@@ -131,15 +212,16 @@ func (rec *Recorder) recordResponse(resp *http.Response) error {
 		return nil
 	}
 
-	// Read response body
+	// Read response body, applying MaxBodySize limit.
 	bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, rec.config.MaxBodySize))
 	if err != nil {
+		log.Printf("recorder: error reading response body: %v", err)
 		return err
 	}
 	resp.Body.Close()
 	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-	// Flatten response headers
+	// Flatten response headers.
 	respHeaders := make(map[string]string)
 	for k, v := range resp.Header {
 		if len(v) > 0 {
@@ -147,7 +229,7 @@ func (rec *Recorder) recordResponse(resp *http.Response) error {
 		}
 	}
 
-	// Build response body (try JSON, fall back to string)
+	// Build response body (try JSON, fall back to string).
 	var respBody json.RawMessage
 	if len(bodyBytes) > 0 {
 		if json.Valid(bodyBytes) {
@@ -181,6 +263,9 @@ func (rec *Recorder) recordResponse(resp *http.Response) error {
 	err = rec.enc.Encode(fixture)
 	rec.mu.Unlock()
 
+	if err != nil {
+		log.Printf("recorder: error writing fixture: %v", err)
+	}
 	return err
 }
 
