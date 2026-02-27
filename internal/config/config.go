@@ -66,6 +66,9 @@ type GraphConfig struct {
 	Password string `mapstructure:"password"`
 }
 
+// VectorConfig holds Qdrant vector-store connection settings.
+// Reserved for future use: no code currently reads these fields at runtime.
+// The pipeline uses PipelineConfig.VectorHost/VectorPort/VectorCollection directly.
 type VectorConfig struct {
 	Host       string `mapstructure:"host"`
 	Port       int    `mapstructure:"port"`
