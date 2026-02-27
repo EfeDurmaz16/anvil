@@ -83,6 +83,8 @@ func (p *Plugin) Scaffold(ctx context.Context, graph *ir.SemanticGraph) ([]plugi
 	return []plugins.GeneratedFile{
 		{Path: "anvil.manifest.json", Content: []byte(anvilManifestJSON)},
 		{Path: "pom.xml", Content: []byte(pomXML)},
+		{Path: "mvnw", Content: []byte(mvnwScript)},
+		{Path: "mvnw.cmd", Content: []byte(mvnwCmdScript)},
 		{Path: "src/main/java/com/anvil/generated/Application.java", Content: []byte(applicationJava)},
 		{Path: "src/main/java/com/anvil/generated/AnvilRunner.java", Content: []byte(anvilRunnerJava)},
 	}, nil

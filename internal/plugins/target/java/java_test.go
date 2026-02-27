@@ -14,8 +14,8 @@ func TestScaffold(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(files) != 4 {
-		t.Fatalf("expected 4 scaffold files, got %d", len(files))
+	if len(files) != 6 {
+		t.Fatalf("expected 6 scaffold files, got %d", len(files))
 	}
 }
 
