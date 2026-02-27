@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/efebarandurmaz/anvil/internal/ir"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 )
 
 var (
@@ -59,7 +60,7 @@ func parseProcedureDivision(lines []string) ([]*ir.Function, []*ir.IOContract) {
 		if currentFn != nil {
 			currentFn.Body = strings.Join(bodyLines, "\n")
 			// Deduplicate calls
-			currentFn.Calls = dedup(currentFn.Calls)
+			currentFn.Calls = stringutil.Dedup(currentFn.Calls)
 			functions = append(functions, currentFn)
 		}
 	}
@@ -281,18 +282,6 @@ func extractIO(upper string, fn *ir.Function, ioContracts *[]*ir.IOContract) {
 			Metadata:  map[string]string{"sql": "true"},
 		})
 	}
-}
-
-func dedup(ss []string) []string {
-	seen := make(map[string]bool)
-	var out []string
-	for _, s := range ss {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 var cobolKeywords = map[string]bool{

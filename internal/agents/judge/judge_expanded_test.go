@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/efebarandurmaz/anvil/internal/agents"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
@@ -473,7 +474,7 @@ func TestToCamelCaseConversion(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := toCamelCase(tt.input)
+		got := stringutil.ToCamelCase(tt.input)
 		if got != tt.expected {
 			t.Errorf("toCamelCase(%q) = %q, want %q", tt.input, got, tt.expected)
 		}

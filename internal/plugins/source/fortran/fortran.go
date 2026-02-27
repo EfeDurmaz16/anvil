@@ -9,6 +9,7 @@ import (
 
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 )
 
 // Plugin implements SourcePlugin for Fortran.
@@ -245,7 +246,7 @@ func parseProgram(ctx *parseState) {
 	if len(mainCalls) > 0 {
 		mainFn := &ir.Function{
 			Name:     "MAIN",
-			Calls:    dedup(mainCalls),
+			Calls:    stringutil.Dedup(mainCalls),
 			Metadata: map[string]string{"kind": "program"},
 		}
 		ctx.module.Functions = append([]*ir.Function{mainFn}, ctx.module.Functions...)
@@ -348,7 +349,7 @@ func parseSubroutine(ctx *parseState, name string, params string) {
 	}
 
 	fn.Body = strings.Join(bodyLines, "\n")
-	fn.Calls = dedup(fn.Calls)
+	fn.Calls = stringutil.Dedup(fn.Calls)
 	ctx.module.Functions = append(ctx.module.Functions, fn)
 	ctx.currentFunc = nil
 }
@@ -454,7 +455,7 @@ func parseFunction(ctx *parseState, name string, params string) {
 	}
 
 	fn.Body = strings.Join(bodyLines, "\n")
-	fn.Calls = dedup(fn.Calls)
+	fn.Calls = stringutil.Dedup(fn.Calls)
 	ctx.module.Functions = append(ctx.module.Functions, fn)
 	ctx.currentFunc = nil
 }
@@ -718,14 +719,3 @@ func parseIOStatement(line string, functionName string) *ir.IOContract {
 	return nil
 }
 
-func dedup(ss []string) []string {
-	seen := make(map[string]bool)
-	var out []string
-	for _, s := range ss {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
-}

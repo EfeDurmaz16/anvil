@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/efebarandurmaz/anvil/internal/llm"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 )
 
 // StripThinkingTags removes <think>...</think> blocks from LLM output.
@@ -130,20 +131,7 @@ func SanitizeLLMOutput(s string) string {
 // ToPascalCase converts an identifier using common separators (-, _, space, .)
 // into PascalCase. Returns "Generated" for empty input.
 func ToPascalCase(name string) string {
-	parts := strings.FieldsFunc(name, func(r rune) bool {
-		return r == '-' || r == '_' || r == ' ' || r == '.'
-	})
-	var out string
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		out += strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
-	}
-	if out == "" {
-		return "Generated"
-	}
-	return out
+	return stringutil.ToPascalCase(name)
 }
 
 // ToCamelCase converts an identifier to camelCase. Returns "unnamed" for empty
@@ -152,29 +140,5 @@ func ToPascalCase(name string) string {
 // lowercased and subsequent words have their first char uppercased and the rest
 // lowercased.
 func ToCamelCase(name string) string {
-	parts := strings.FieldsFunc(name, func(r rune) bool {
-		return r == '-' || r == '_' || r == ' ' || r == '.'
-	})
-	if len(parts) == 0 {
-		return "unnamed"
-	}
-	if len(parts) == 1 {
-		p := parts[0]
-		return strings.ToLower(p[:1]) + p[1:]
-	}
-	var out string
-	for i, p := range parts {
-		if p == "" {
-			continue
-		}
-		if i == 0 {
-			out += strings.ToLower(p)
-		} else {
-			out += strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
-		}
-	}
-	if out == "" {
-		return "unnamed"
-	}
-	return out
+	return stringutil.ToCamelCase(name)
 }

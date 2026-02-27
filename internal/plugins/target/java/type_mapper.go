@@ -1,6 +1,9 @@
 package java
 
-import "github.com/efebarandurmaz/anvil/internal/ir"
+import (
+	"github.com/efebarandurmaz/anvil/internal/ir"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
+)
 
 func mapType(dt *ir.DataType) string {
 	switch dt.Kind {
@@ -21,7 +24,7 @@ func mapType(dt *ir.DataType) string {
 		}
 		return "java.util.List<Object>"
 	case ir.TypeStruct:
-		return toClassName(dt.Name)
+		return stringutil.ToPascalCase(dt.Name)
 	default:
 		return "Object"
 	}

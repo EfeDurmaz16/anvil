@@ -1,6 +1,10 @@
 package typescript
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/efebarandurmaz/anvil/internal/llmutil"
+)
 
 func TestStripMarkdownFences(t *testing.T) {
 	tests := []struct {
@@ -44,9 +48,9 @@ func TestStripMarkdownFences(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := stripMarkdownFences(tt.input)
+			result := llmutil.StripMarkdownFences(tt.input)
 			if result != tt.expected {
-				t.Errorf("stripMarkdownFences() = %q, want %q", result, tt.expected)
+				t.Errorf("llmutil.StripMarkdownFences() = %q, want %q", result, tt.expected)
 			}
 		})
 	}

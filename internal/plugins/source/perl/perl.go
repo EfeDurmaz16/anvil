@@ -8,6 +8,7 @@ import (
 
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 )
 
 // Plugin implements SourcePlugin for Perl.
@@ -261,7 +262,7 @@ func parseSubs(lines []string) ([]*ir.Function, []*ir.DataType, []*ir.IOContract
 				currentFn.Parameters = extractParametersFromBody(bodyLines)
 			}
 			// Deduplicate calls
-			currentFn.Calls = dedup(currentFn.Calls)
+			currentFn.Calls = stringutil.Dedup(currentFn.Calls)
 			functions = append(functions, currentFn)
 		}
 	}
@@ -622,18 +623,6 @@ func stripComment(line string) string {
 
 func countBraces(line string) int {
 	return strings.Count(line, "{") - strings.Count(line, "}")
-}
-
-func dedup(ss []string) []string {
-	seen := make(map[string]bool)
-	var out []string
-	for _, s := range ss {
-		if !seen[s] {
-			seen[s] = true
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func isCoreMod(name string) bool {

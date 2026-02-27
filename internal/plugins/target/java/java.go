@@ -8,7 +8,9 @@ import (
 
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
+	"github.com/efebarandurmaz/anvil/internal/llmutil"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 )
 
 // Plugin implements TargetPlugin for Java Spring Boot.
@@ -36,7 +38,7 @@ func (p *Plugin) Generate(ctx context.Context, graph *ir.SemanticGraph, provider
 			defer wg.Done()
 			defer func() { <-sem }() // release
 
-			className := toClassName(m.Name)
+			className := stringutil.ToPascalCase(m.Name)
 			var content string
 
 			if provider != nil {
@@ -68,7 +70,7 @@ func (p *Plugin) Generate(ctx context.Context, graph *ir.SemanticGraph, provider
 		if dt.Kind == ir.TypeStruct {
 			content := generateTypeClass(dt)
 			files = append(files, plugins.GeneratedFile{
-				Path:    fmt.Sprintf("src/main/java/com/anvil/generated/model/%s.java", toClassName(dt.Name)),
+				Path:    fmt.Sprintf("src/main/java/com/anvil/generated/model/%s.java", stringutil.ToPascalCase(dt.Name)),
 				Content: []byte(content),
 			})
 		}
@@ -84,39 +86,6 @@ func (p *Plugin) Scaffold(ctx context.Context, graph *ir.SemanticGraph) ([]plugi
 		{Path: "src/main/java/com/anvil/generated/Application.java", Content: []byte(applicationJava)},
 		{Path: "src/main/java/com/anvil/generated/AnvilRunner.java", Content: []byte(anvilRunnerJava)},
 	}, nil
-}
-
-// stripMarkdownFences removes markdown code fences from LLM output.
-func stripMarkdownFences(s string) string {
-	s = llm.StripThinkingTags(s)
-	lines := strings.Split(s, "\n")
-
-	// Find and remove leading fence
-	start := 0
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") {
-			start = i + 1
-			break
-		}
-	}
-
-	// Find and remove trailing fence
-	end := len(lines)
-	for i := len(lines) - 1; i >= start; i-- {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "```") {
-			end = i
-			break
-		}
-	}
-
-	// If no fences found, return original
-	if start == 0 && end == len(lines) {
-		return s
-	}
-
-	return strings.Join(lines[start:end], "\n")
 }
 
 func generateWithLLM(ctx context.Context, provider llm.Provider, mod *ir.Module, className string, graph *ir.SemanticGraph) (string, error) {
@@ -154,8 +123,8 @@ Spring Boot annotation guidance:
 	if err != nil {
 		return "", err
 	}
-	raw := stripMarkdownFences(resp.Content)
-	return sanitizeLLMOutput(raw), nil
+	raw := llmutil.StripMarkdownFences(resp.Content)
+	return llmutil.SanitizeLLMOutput(raw), nil
 }
 
 // buildModuleContext assembles a rich context string for the LLM including
@@ -293,41 +262,6 @@ func collectRelevantDataTypes(mod *ir.Module, allTypes []*ir.DataType) []*ir.Dat
 		result = result[:8]
 	}
 	return result
-}
-
-// sanitizeLLMOutput strips stray package/import lines that duplicate what the
-// template already provides, and removes trailing prose.
-func sanitizeLLMOutput(s string) string {
-	lines := strings.Split(s, "\n")
-	var cleaned []string
-	inCode := true
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-
-		// Stop at trailing prose lines
-		if inCode && (strings.HasPrefix(trimmed, "This class") ||
-			strings.HasPrefix(trimmed, "This code") ||
-			strings.HasPrefix(trimmed, "Note:") ||
-			strings.HasPrefix(trimmed, "The above") ||
-			strings.HasPrefix(trimmed, "Here is") ||
-			strings.HasPrefix(trimmed, "Here's")) {
-			inCode = false
-		}
-		if !inCode {
-			continue
-		}
-		cleaned = append(cleaned, line)
-	}
-
-	// Trim leading/trailing blank lines
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
-		cleaned = cleaned[1:]
-	}
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
-		cleaned = cleaned[:len(cleaned)-1]
-	}
-
-	return strings.Join(cleaned, "\n")
 }
 
 // describeDataType creates a human-readable description of an IR data type.

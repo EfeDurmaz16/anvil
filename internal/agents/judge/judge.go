@@ -13,6 +13,7 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 )
 
 // Judge verifies semantic equivalence of generated code against the original IR.
@@ -294,7 +295,7 @@ func parseVerdict(text string) (*verdict, error) {
 // by looking for the method DEFINITION signature (not just any name reference).
 // This prevents matching function names in JSDoc comments or method calls.
 func extractFunctionSnippet(generatedText, fnName string) string {
-	camelName := toCamelCase(fnName)
+	camelName := stringutil.ToCamelCase(fnName)
 
 	// Look for method definition pattern: "  methodName(" at start of line
 	defPatterns := []string{
@@ -349,24 +350,6 @@ func extractFunctionSnippet(generatedText, fnName string) string {
 		return generatedText[:2000] + "\n…(truncated)…"
 	}
 	return generatedText
-}
-
-func toCamelCase(name string) string {
-	parts := strings.FieldsFunc(name, func(r rune) bool {
-		return r == '-' || r == '_' || r == ' ' || r == '.'
-	})
-	var out string
-	for i, p := range parts {
-		if p == "" {
-			continue
-		}
-		if i == 0 {
-			out += strings.ToLower(p)
-		} else {
-			out += strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
-		}
-	}
-	return out
 }
 
 func truncate(s string, n int) string {

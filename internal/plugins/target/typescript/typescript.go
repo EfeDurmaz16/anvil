@@ -11,7 +11,9 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/agents/architect"
 	"github.com/efebarandurmaz/anvil/internal/ir"
 	"github.com/efebarandurmaz/anvil/internal/llm"
+	"github.com/efebarandurmaz/anvil/internal/llmutil"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
+	"github.com/efebarandurmaz/anvil/internal/stringutil"
 )
 
 // Plugin implements TargetPlugin for TypeScript.
@@ -26,7 +28,7 @@ func (p *Plugin) Generate(ctx context.Context, graph *ir.SemanticGraph, provider
 
 	// Emit module services.
 	for _, mod := range graph.Modules {
-		svcName := toPascalCase(mod.Name) + "Service"
+		svcName := stringutil.ToPascalCase(mod.Name) + "Service"
 		var content string
 		if provider != nil {
 			// Use LLM to generate actual implementation
@@ -36,7 +38,7 @@ func (p *Plugin) Generate(ctx context.Context, graph *ir.SemanticGraph, provider
 			content = generateService(mod, svcName)
 		}
 		files = append(files, plugins.GeneratedFile{
-			Path:    fmt.Sprintf("src/generated/%s.ts", toKebabCase(mod.Name)),
+			Path:    fmt.Sprintf("src/generated/%s.ts", stringutil.ToKebabCase(mod.Name)),
 			Content: []byte(content),
 		})
 	}
@@ -182,111 +184,6 @@ func buildFunctionContext(mod *ir.Module, fn *ir.Function, graph *ir.SemanticGra
 	return ctx.String()
 }
 
-// stripMarkdownFences removes markdown code fences from LLM output.
-func stripMarkdownFences(s string) string {
-	// First strip thinking tags
-	s = llm.StripThinkingTags(s)
-
-	lines := strings.Split(s, "\n")
-
-	// Find and remove leading fence
-	start := 0
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") {
-			start = i + 1
-			break
-		}
-	}
-
-	// Find and remove trailing fence
-	end := len(lines)
-	for i := len(lines) - 1; i >= start; i-- {
-		trimmed := strings.TrimSpace(lines[i])
-		if strings.HasPrefix(trimmed, "```") {
-			end = i
-			break
-		}
-	}
-
-	// If no fences found, return original
-	if start == 0 && end == len(lines) {
-		return s
-	}
-
-	return strings.Join(lines[start:end], "\n")
-}
-
-// sanitizeLLMOutput strips import/export statements, unwraps function/class
-// wrappers, and removes trailing prose that LLMs commonly include.
-func sanitizeLLMOutput(s string) string {
-	lines := strings.Split(s, "\n")
-	var cleaned []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		// Skip import/require statements
-		if strings.HasPrefix(trimmed, "import ") || strings.HasPrefix(trimmed, "import{") {
-			continue
-		}
-		if strings.Contains(trimmed, "require(") && (strings.HasPrefix(trimmed, "const ") || strings.HasPrefix(trimmed, "let ") || strings.HasPrefix(trimmed, "var ")) {
-			continue
-		}
-		// Skip export statements
-		if strings.HasPrefix(trimmed, "export ") {
-			continue
-		}
-		// Strip trailing prose (non-code text after the implementation)
-		if strings.HasPrefix(trimmed, "This ") || strings.HasPrefix(trimmed, "Note:") || strings.HasPrefix(trimmed, "The above") || strings.HasPrefix(trimmed, "Here ") {
-			break
-		}
-		cleaned = append(cleaned, line)
-	}
-
-	// Trim leading/trailing empty lines
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
-		cleaned = cleaned[1:]
-	}
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
-		cleaned = cleaned[:len(cleaned)-1]
-	}
-
-	// Unwrap function/class wrappers: if first line is a function/class
-	// declaration and last line is its closing brace, extract only the body.
-	if len(cleaned) >= 3 {
-		first := strings.TrimSpace(cleaned[0])
-		last := strings.TrimSpace(cleaned[len(cleaned)-1])
-		isFuncDecl := (strings.HasPrefix(first, "function ") ||
-			strings.HasPrefix(first, "async function ") ||
-			strings.HasPrefix(first, "class ")) &&
-			strings.HasSuffix(first, "{")
-		if isFuncDecl && last == "}" {
-			// Extract body, removing one level of indentation
-			body := cleaned[1 : len(cleaned)-1]
-			var unwrapped []string
-			for _, line := range body {
-				// Remove one level of indentation (2 spaces or 1 tab)
-				if strings.HasPrefix(line, "\t") {
-					line = line[1:]
-				} else if strings.HasPrefix(line, "  ") {
-					line = line[2:]
-				}
-				unwrapped = append(unwrapped, line)
-			}
-			cleaned = unwrapped
-		}
-	}
-
-	// Trim again after unwrapping
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[0]) == "" {
-		cleaned = cleaned[1:]
-	}
-	for len(cleaned) > 0 && strings.TrimSpace(cleaned[len(cleaned)-1]) == "" {
-		cleaned = cleaned[:len(cleaned)-1]
-	}
-
-	return strings.Join(cleaned, "\n")
-}
-
 // generateFunctionWithLLM generates a single function implementation using LLM.
 func generateFunctionWithLLM(ctx context.Context, fn *ir.Function, fnContext string, sourceLang string, provider llm.Provider) string {
 
@@ -347,8 +244,8 @@ Rules:
 	}
 
 	// Extract and format the response
-	impl := strings.TrimSpace(stripMarkdownFences(resp.Content))
-	impl = sanitizeLLMOutput(impl)
+	impl := strings.TrimSpace(llmutil.StripMarkdownFences(resp.Content))
+	impl = llmutil.SanitizeLLMOutput(impl)
 
 	// Wrap in method signature
 	var b strings.Builder
@@ -367,7 +264,7 @@ Rules:
 	params := generateParamList(fn)
 	returnType := generateReturnType(fn)
 
-	b.WriteString(fmt.Sprintf("  %s(%s): %s {\n", toCamelCase(fn.Name), params, returnType))
+	b.WriteString(fmt.Sprintf("  %s(%s): %s {\n", stringutil.ToCamelCase(fn.Name), params, returnType))
 
 	// Indent the implementation
 	for _, line := range strings.Split(impl, "\n") {
@@ -385,7 +282,7 @@ func generateFunctionStub(fn *ir.Function) string {
 	returnType := generateReturnType(fn)
 
 	b.WriteString(fmt.Sprintf("  /** Migrated from %s */\n", fn.Name))
-	b.WriteString(fmt.Sprintf("  %s(%s): %s {\n", toCamelCase(fn.Name), params, returnType))
+	b.WriteString(fmt.Sprintf("  %s(%s): %s {\n", stringutil.ToCamelCase(fn.Name), params, returnType))
 	b.WriteString("    // TODO: implement migrated logic\n")
 	b.WriteString("    throw new Error('Not implemented');\n")
 	b.WriteString("  }\n\n")
@@ -400,7 +297,7 @@ func generateParamList(fn *ir.Function) string {
 
 	var params []string
 	for _, p := range fn.Parameters {
-		params = append(params, fmt.Sprintf("%s: %s", toCamelCase(p.Name), mapType(p.Type)))
+		params = append(params, fmt.Sprintf("%s: %s", stringutil.ToCamelCase(p.Name), mapType(p.Type)))
 	}
 	return strings.Join(params, ", ")
 }
@@ -419,11 +316,11 @@ func collectModelImports(mod *ir.Module, _ []*ir.DataType) []string {
 	for _, fn := range mod.Functions {
 		for _, p := range fn.Parameters {
 			if p.Type != nil && p.Type.Kind == ir.TypeStruct {
-				used[toPascalCase(p.Type.Name)] = true
+				used[stringutil.ToPascalCase(p.Type.Name)] = true
 			}
 		}
 		if fn.Returns != nil && fn.Returns.Kind == ir.TypeStruct {
-			used[toPascalCase(fn.Returns.Name)] = true
+			used[stringutil.ToPascalCase(fn.Returns.Name)] = true
 		}
 	}
 
@@ -475,7 +372,7 @@ func generateService(mod *ir.Module, svcName string) string {
 	b.WriteString(fmt.Sprintf("export class %s {\n", svcName))
 	for _, fn := range mod.Functions {
 		b.WriteString(fmt.Sprintf("  /** Migrated from %s.%s */\n", mod.Name, fn.Name))
-		b.WriteString(fmt.Sprintf("  %s(_input?: UnknownRecord): void {\n", toCamelCase(fn.Name)))
+		b.WriteString(fmt.Sprintf("  %s(_input?: UnknownRecord): void {\n", stringutil.ToCamelCase(fn.Name)))
 		b.WriteString("    // TODO: implement migrated logic\n")
 		b.WriteString("  }\n\n")
 	}
@@ -496,12 +393,12 @@ func generateModels(types []*ir.DataType) string {
 		if dt == nil || dt.Kind != ir.TypeStruct {
 			continue
 		}
-		b.WriteString(fmt.Sprintf("export interface %s {\n", toPascalCase(dt.Name)))
+		b.WriteString(fmt.Sprintf("export interface %s {\n", stringutil.ToPascalCase(dt.Name)))
 		for _, f := range dt.Fields {
 			if f == nil {
 				continue
 			}
-			b.WriteString(fmt.Sprintf("  %s?: %s;\n", toCamelCase(f.Name), mapType(f)))
+			b.WriteString(fmt.Sprintf("  %s?: %s;\n", stringutil.ToCamelCase(f.Name), mapType(f)))
 		}
 		b.WriteString("}\n\n")
 	}
@@ -513,7 +410,7 @@ func generateIndex(mods []*ir.Module) string {
 	b.WriteString("/* Generated by Anvil. */\n\n")
 	b.WriteString("export * from \"./model\";\n")
 	for _, m := range mods {
-		b.WriteString(fmt.Sprintf("export * from \"./%s\";\n", toKebabCase(m.Name)))
+		b.WriteString(fmt.Sprintf("export * from \"./%s\";\n", stringutil.ToKebabCase(m.Name)))
 	}
 	return b.String()
 }
@@ -535,49 +432,10 @@ func mapType(dt *ir.DataType) string {
 		}
 		return "Array<unknown>"
 	case ir.TypeStruct:
-		return toPascalCase(dt.Name)
+		return stringutil.ToPascalCase(dt.Name)
 	default:
 		return "unknown"
 	}
-}
-
-func toPascalCase(name string) string {
-	parts := strings.FieldsFunc(name, func(r rune) bool {
-		return r == '-' || r == '_' || r == ' ' || r == '.'
-	})
-	var out string
-	for _, p := range parts {
-		if p == "" {
-			continue
-		}
-		out += strings.ToUpper(p[:1]) + strings.ToLower(p[1:])
-	}
-	if out == "" {
-		return "Generated"
-	}
-	return out
-}
-
-func toCamelCase(name string) string {
-	p := toPascalCase(name)
-	if p == "" {
-		return "unnamed"
-	}
-	return strings.ToLower(p[:1]) + p[1:]
-}
-
-func toKebabCase(name string) string {
-	// Best-effort normalization for filenames.
-	s := strings.TrimSpace(strings.ToLower(name))
-	s = strings.NewReplacer("::", "-", ".", "-", "_", "-", " ", "-").Replace(s)
-	for strings.Contains(s, "--") {
-		s = strings.ReplaceAll(s, "--", "-")
-	}
-	s = strings.Trim(s, "-")
-	if s == "" {
-		return "generated"
-	}
-	return s
 }
 
 const packageJSON = `{
