@@ -32,16 +32,10 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/migration"
 	"github.com/efebarandurmaz/anvil/internal/observability"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
+	plugindefaults "github.com/efebarandurmaz/anvil/internal/plugins/defaults"
 	"github.com/efebarandurmaz/anvil/internal/qualitygate"
 	"github.com/efebarandurmaz/anvil/internal/snapshot"
 	"github.com/efebarandurmaz/anvil/internal/tui"
-	cobolplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/cobol"
-	fortranplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/fortran"
-	perlplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/perl"
-	goplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/golang"
-	javaplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/java"
-	pythonplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/python"
-	tsplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/typescript"
 	"github.com/spf13/cobra"
 )
 
@@ -569,13 +563,7 @@ func runPipeline(configPath, sourceLang, targetLang, inputPath, outputPath strin
 	}
 
 	registry := plugins.NewRegistry()
-	registry.RegisterSource(cobolplugin.New())
-	registry.RegisterSource(perlplugin.New())
-	registry.RegisterSource(fortranplugin.New())
-	registry.RegisterTarget(javaplugin.New())
-	registry.RegisterTarget(pythonplugin.New())
-	registry.RegisterTarget(goplugin.New())
-	registry.RegisterTarget(tsplugin.New())
+	plugindefaults.RegisterAllDefaults(registry)
 
 	// Build LLM provider via factory
 	factory := llm.NewFactory()
@@ -1507,13 +1495,7 @@ func runReview(sourcePath, targetLang, configPath, outputPath string, scoreThres
 
 	// Register plugins
 	registry := plugins.NewRegistry()
-	registry.RegisterSource(cobolplugin.New())
-	registry.RegisterSource(perlplugin.New())
-	registry.RegisterSource(fortranplugin.New())
-	registry.RegisterTarget(javaplugin.New())
-	registry.RegisterTarget(pythonplugin.New())
-	registry.RegisterTarget(goplugin.New())
-	registry.RegisterTarget(tsplugin.New())
+	plugindefaults.RegisterAllDefaults(registry)
 
 	// Create LLM provider
 	factory := llm.NewFactory()

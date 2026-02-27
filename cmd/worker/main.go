@@ -11,13 +11,7 @@ import (
 	"github.com/efebarandurmaz/anvil/internal/llmutil"
 	"github.com/efebarandurmaz/anvil/internal/observability"
 	"github.com/efebarandurmaz/anvil/internal/plugins"
-	cobolplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/cobol"
-	fortranplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/fortran"
-	perlplugin "github.com/efebarandurmaz/anvil/internal/plugins/source/perl"
-	goplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/golang"
-	javaplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/java"
-	pythonplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/python"
-	tsplugin "github.com/efebarandurmaz/anvil/internal/plugins/target/typescript"
+	plugindefaults "github.com/efebarandurmaz/anvil/internal/plugins/defaults"
 	"github.com/efebarandurmaz/anvil/internal/server"
 	temporalmod "github.com/efebarandurmaz/anvil/internal/temporal"
 
@@ -59,13 +53,7 @@ func main() {
 
 	// Build plugin registry.
 	registry := plugins.NewRegistry()
-	registry.RegisterSource(cobolplugin.New())
-	registry.RegisterSource(perlplugin.New())
-	registry.RegisterSource(fortranplugin.New())
-	registry.RegisterTarget(javaplugin.New())
-	registry.RegisterTarget(pythonplugin.New())
-	registry.RegisterTarget(goplugin.New())
-	registry.RegisterTarget(tsplugin.New())
+	plugindefaults.RegisterAllDefaults(registry)
 
 	// Build LLM provider via factory (supports on-prem/no-LLM operation).
 	factory := llm.NewFactory()
